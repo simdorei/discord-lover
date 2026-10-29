@@ -45,7 +45,9 @@ impl Settings {
             }
             && match &update.service_tier {
                 ServiceTierUpdate::Unchanged => true,
-                ServiceTierUpdate::Clear => self.tier.is_none(),
+                ServiceTierUpdate::Clear => {
+                    matches!(self.tier.as_deref(), None | Some("default"))
+                }
                 ServiceTierUpdate::Set(tier) => Some(tier) == self.tier.as_ref(),
             }
     }
@@ -79,6 +81,26 @@ fn invalid(reason: &str) -> ActionError {
 mod tests {
     use super::*;
     use serde_json::json;
+    #[test]
+    fn standard_matches_only_explicit_default_or_null_tier() {
+        let update = ThreadSettingsUpdate {
+            service_tier: ServiceTierUpdate::Clear,
+            ..ThreadSettingsUpdate::default()
+        };
+        for (tier, expected) in [
+            (Value::Null, true),
+            (json!("default"), true),
+            (json!("priority"), false),
+            (json!("unknown"), false),
+        ] {
+            let settings =
+                Settings::parse(&json!({"model":"model-a","effort":"high","serviceTier":tier}))
+                    .unwrap();
+            assert_eq!(settings.matches(&update), expected);
+        }
+        assert!(Settings::parse(&json!({"model":"model-a","effort":"high"})).is_err());
+    }
+
     #[test]
     fn incomplete_resume_is_not_invented_as_default_effort_or_standard_speed() {
         for value in [
