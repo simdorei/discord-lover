@@ -120,5 +120,24 @@ fn sealed_cleanup_preserves_all_data_and_markers_without_opening_a_store() {
             .join(".codex_discord_rust.runtime.lock")
             .exists()
     );
-    assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), names.len());
+    // The cross-session lock must persist so concurrent openers share the same
+    // inode. It is empty coordination metadata, not a store or runtime marker.
+    let exclusive_name = ".codex_discord_rust.exclusive.lock";
+    assert!(
+        std::fs::read(temp.path().join(exclusive_name))
+            .unwrap()
+            .is_empty()
+    );
+    let expected = names
+        .into_iter()
+        .chain([exclusive_name])
+        .map(OsString::from)
+        .collect::<std::collections::BTreeSet<_>>();
+    let actual = std::fs::read_dir(temp.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(actual, expected);
+    // Leaving the file behind must not leave its exclusive OS lock held.
+    drop(RuntimeInstanceGuard::acquire(temp.path()).unwrap());
 }

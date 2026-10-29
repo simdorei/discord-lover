@@ -111,6 +111,7 @@ fn documented_slash_names_and_each_registered_option_reach_their_actual_actions(
             "doctor" => CommandAction::Doctor,
             "approval" => CommandAction::Approval,
             "runners" => CommandAction::Runners,
+            "stop" => CommandAction::Stop { reference: None },
             "retract" => CommandAction::Retract { reference },
             "mirror_check" => CommandAction::MirrorCheck,
             "bridge_sync" => CommandAction::BridgeSync { limit: Some(3) },
