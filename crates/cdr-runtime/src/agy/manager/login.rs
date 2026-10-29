@@ -1,11 +1,20 @@
 //! The explicit tray action launches the official interactive CLI in this profile.
-use super::{AgyConfig, AgyError, Arc, Duration, Result};
+use super::{AgyConfig, AgyError, Result};
+#[cfg(windows)]
+use super::{Arc, Duration};
 #[derive(Clone, Default)]
 pub(super) struct Login {
     #[cfg(windows)]
     child: Arc<std::sync::Mutex<Option<cdr_windows_native::WindowProcess>>>,
 }
 impl Login {
+    #[cfg_attr(
+        not(windows),
+        expect(
+            clippy::unused_self,
+            reason = "the manager uses the same instance API on every platform"
+        )
+    )]
     pub fn active(&self) -> bool {
         #[cfg(windows)]
         {
@@ -16,6 +25,13 @@ impl Login {
             false
         }
     }
+    #[cfg_attr(
+        not(windows),
+        expect(
+            clippy::unused_async,
+            reason = "Windows awaits the blocking worker; unsupported hosts retain that async API"
+        )
+    )]
     pub async fn launch(
         &self,
         config: AgyConfig,
@@ -58,6 +74,14 @@ impl Login {
         }
     }
     /// Nonblocking poll retains the process/job if the whole tree is not yet gone.
+    #[cfg_attr(
+        not(windows),
+        expect(
+            clippy::unused_self,
+            clippy::unnecessary_wraps,
+            reason = "the shared instance API returns Windows process polling errors"
+        )
+    )]
     pub fn poll(&self, stop: bool) -> Result<bool> {
         #[cfg(windows)]
         {

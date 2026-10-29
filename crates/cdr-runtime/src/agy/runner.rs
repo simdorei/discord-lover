@@ -282,7 +282,7 @@ async fn bounded_line(
     Ok(Some(line))
 }
 
-#[cfg(test)]
+#[cfg(all(test, windows))]
 async fn execute_process(
     executable: &Path,
     args: &[String],

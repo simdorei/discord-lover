@@ -1,6 +1,6 @@
 {
   "name": "codex-discord-remote",
-  "version": "0.1.0+codex.20261029091852",
+  "version": "0.1.0+codex.20261029101759",
   "description": "Operate, QA, recover, and connect ChatGPT Pro to a local Codex Discord Remote runtime.",
   "author": {
     "name": "simdorei"

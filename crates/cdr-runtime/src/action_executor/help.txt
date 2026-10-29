@@ -57,7 +57,7 @@ ref는 목록의 대화 ID(UUID) 또는 모호하지 않은 참조입니다. 안
 !help — 이 도움말
 
 / 명령
-등록된 항목: /help /list /archived_list /status /settings /where /context /usage /new /interview /doctor /approval /runners /retract /mirror_check /bridge_sync
+등록된 항목: /help /list /archived_list /status /settings /where /context /usage /new /interview /doctor /approval /runners /stop /retract /mirror_check /bridge_sync
 /new·/interview는 prompt 필수. /settings는 ref/model/effort/speed, /context는 all_threads/refresh/limit 옵션입니다.
 /list·/archived_list·/bridge_sync는 limit, /usage는 days, /status·/retract는 ref 옵션입니다.
 ! 명령 전용: archive, resume, open, steer, stop, resources, pro, delete_archive, 저장 요청 ID 상세 조회.

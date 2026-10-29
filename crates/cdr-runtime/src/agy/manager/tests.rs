@@ -1,5 +1,6 @@
 use super::*;
 use crate::agy::{config::Project, tests::support::Remote};
+#[cfg(windows)]
 mod failure_quiescence;
 
 #[tokio::test]

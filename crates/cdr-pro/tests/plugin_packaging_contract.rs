@@ -1,4 +1,5 @@
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -9,6 +10,27 @@ fn root() -> PathBuf {
 fn read(path: impl AsRef<Path>) -> String {
     fs::read_to_string(root().join(path)).unwrap()
 }
+
+#[test]
+fn packaged_probe_fingerprints_match_native_verifiers() {
+    use cdr_pro::evidence::{BROWSER_PROBE_SHA256, CONNECTOR_PROBE_SHA256};
+
+    for (file, expected) in [
+        ("browser_evidence_probe.mjs", BROWSER_PROBE_SHA256),
+        ("pro_connector_control.mjs", CONNECTOR_PROBE_SHA256),
+    ] {
+        let source = read(format!(
+            "plugins/codex-discord-remote/skills/ask-chatgpt-pro/scripts/{file}"
+        ));
+        let canonical = source.replace("\r\n", "\n").replace('\r', "\n");
+        assert_eq!(
+            hex::encode(Sha256::digest(canonical.as_bytes())),
+            expected,
+            "{file}: reviewed script and native verifier fingerprint must change together"
+        );
+    }
+}
+
 #[test]
 fn packaged_skills_and_browser_scripts_match_the_project_sources() {
     let base = "plugins/codex-discord-remote/skills/ask-chatgpt-pro";
