@@ -29,12 +29,17 @@ fn update_effective_settings(mode: &str, request: &Value, settings: &mut Value) 
     for key in ["model", "effort", "serviceTier"] {
         if let Some(value) = request["params"].get(key) {
             // Reproduce the installed server's effective default-tier observation.
-            settings[key] =
-                if key == "serviceTier" && mode == "reserve-default-tier" && value.is_null() {
-                    json!("default")
-                } else {
-                    value.clone()
-                };
+            settings[key] = if key == "serviceTier"
+                && matches!(
+                    mode,
+                    "reserve-default-tier" | "standard-noop" | "standard-clear"
+                )
+                && value.is_null()
+            {
+                json!("default")
+            } else {
+                value.clone()
+            };
         }
     }
     match mode {
@@ -46,20 +51,28 @@ fn update_effective_settings(mode: &str, request: &Value, settings: &mut Value) 
     }
 }
 
-pub(super) fn run() -> Result {
-    let mode = env("SETTINGS_TEST_MODE");
-    let log = env("SETTINGS_TEST_LOG");
-    let root = Path::new(&log).parent().unwrap();
+fn initial_settings(mode: &str) -> Value {
     let mut settings = json!({"model":"model-a","effort":"high","serviceTier":null});
     if mode == "reserve-active" {
         settings["model"] = json!("gpt-reserve");
     }
-    if mode == "reserve-default-tier" {
+    if matches!(mode, "reserve-default-tier" | "standard-noop") {
         settings["serviceTier"] = json!("default");
+    }
+    if mode == "standard-clear" {
+        settings["serviceTier"] = json!("priority");
     }
     if mode.starts_with("reserve-noop") {
         settings = json!({"model":"gpt-reserve","effort":"xhigh","serviceTier":"default"});
     }
+    settings
+}
+
+pub(super) fn run() -> Result {
+    let mode = env("SETTINGS_TEST_MODE");
+    let log = env("SETTINGS_TEST_LOG");
+    let root = Path::new(&log).parent().unwrap();
+    let mut settings = initial_settings(&mode);
     serve(Path::new(&log), Logging::All, |request| {
         let thread = thread(&request);
         let result = match method(&request) {
@@ -103,7 +116,8 @@ pub(super) fn run() -> Result {
                 }
                 let previous = settings.clone();
                 update_effective_settings(&mode, &request, &mut settings);
-                let unchanged = mode.starts_with("reserve-noop") && settings == previous;
+                let unchanged = (mode.starts_with("reserve-noop") || mode == "standard-noop")
+                    && settings == previous;
                 if !unchanged
                     && !matches!(
                         mode.as_str(),

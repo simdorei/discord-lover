@@ -18,7 +18,7 @@ const appName = 'simdorei-local-project-oauth';
 const appPath = 'app://asdk_app_6a6ae90be0a08191b877eddba93b631c';
 const appChip = `span[contenteditable="false"][app-mention-name="${appName}"][app-mention-display-name="${name}"][app-mention-path="${appPath}"][data-prompt-link-href="${appPath}"]`;
 const currentPill = pill + ', ' + chip + ', ' + appChip;
-const model = 'button[data-codex-intelligence-trigger="true"][data-composer-navigation-target="reasoning"]';
+const model = 'button[data-composer-navigation-target="reasoning"]:is([data-codex-intelligence-trigger="true"], [aria-label="ChatGPT 모델 선택"])';
 const plus = 'button[data-composer-navigation-target="add-context"]';
 
 // A DOM-shaped adapter for the observed current composer. Unknown selectors fail
@@ -72,7 +72,7 @@ function fixture(config = {}) {
         if (state.draftOnModel) state.draft = 'concurrent user draft';
         return state.modelCount ?? 1;
       }
-      if (kind === 'pro') return (state.modelText ?? 'Pro') === 'Pro' ? 1 : 0;
+      if (kind === 'pro') return state.proCount ?? ((state.modelText ?? 'Pro') === 'Pro' ? 1 : 0);
       if (kind === 'chat') return state.chatCount ?? (state.plainChat ? 0 : 1);
       if (kind === 'work') return state.workCount ?? (state.plainChat ? 0 : 1);
       if (kind === 'modes') return state.modesCount ?? (state.plainChat ? 0 : 1);
@@ -263,6 +263,22 @@ const plainPicker = {
   catalog: false, attached: false, plainChat: true, picker: true,
   resultUrl: 'https://chatgpt.com/c/6ab7958e-82a0-83e8-b5b4-f056a0610259',
 };
+
+test('Korean reasoning label preserves exact Pro verification before and after attachment', async () => {
+  for (const attached of [false, true]) {
+    const { result } = await run({ ...plainPicker, attached, modelText: '추론 수준\nPro', proCount: 1 });
+    assert.equal(result.status, 'verified');
+  }
+  for (const config of [
+    { modelText: '추론 수준\nThinking', proCount: 1 },
+    { modelText: '추론 수준\nPro settings', proCount: 1 },
+    { modelText: '추론 수준\nPro', proCount: 0 },
+    { modelText: '추론 수준\nPro', proCount: 2 },
+  ]) {
+    const { result } = await run({ ...plainPicker, ...config });
+    assert.equal(result.status, 'failed');
+  }
+});
 
 test('current thread picker attaches exact chip without creating another conversation', async () => {
   const f = fixture(plainPicker);

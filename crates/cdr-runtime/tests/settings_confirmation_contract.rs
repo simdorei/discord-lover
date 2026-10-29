@@ -98,6 +98,66 @@ async fn exact_reference_multi_change_and_standard_clear_are_verified() {
     assert!(updates[1]["params"].get("serviceTier").unwrap().is_null());
 }
 
+#[tokio::test]
+async fn standard_accepts_default_tier_and_already_applied_settings_without_notifications() {
+    for (mode, update_count) in [("standard-clear", 1), ("standard-noop", 0), ("missing", 0)] {
+        let temp = tempfile::tempdir().unwrap();
+        let log = temp.path().join("rpc.jsonl");
+        let server = Arc::new(app::start(&temp, &log, mode).await);
+        let (executor, bridge) = setup(&temp, server.clone());
+        let result = executor
+            .execute(
+                CommandAction::Settings {
+                    reference: Some("thread-b".into()),
+                    model: None,
+                    effort: None,
+                    speed: Some("standard".into()),
+                },
+                42,
+                3,
+            )
+            .await
+            .unwrap();
+        assert!(
+            result.text.contains("속도: standard"),
+            "{mode}: {}",
+            result.text
+        );
+        assert!(!result.text.contains("속도: default"));
+        if update_count == 0 {
+            assert!(result.text.contains("이미 적용된"));
+        }
+        assert_eq!(
+            bridge.thread_settings("thread-b").unwrap().speed.as_deref(),
+            Some("standard")
+        );
+        assert_eq!(
+            bridge.selected_thread_id().unwrap().as_deref(),
+            Some("thread-a")
+        );
+        server.close().await.unwrap();
+        let calls = frames(&log);
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|v| v["method"] == "thread/resume")
+                .count(),
+            1
+        );
+        assert_eq!(
+            calls
+                .iter()
+                .filter(|v| v["method"] == "thread/settings/update")
+                .count(),
+            update_count
+        );
+        assert!(!calls.iter().any(|v| matches!(
+            v["method"].as_str(),
+            Some("thread/fork" | "turn/start" | "thread/start")
+        )));
+    }
+}
+
 fn setup(
     temp: &tempfile::TempDir,
     server: Arc<cdr_app_server::ResidentAppServer>,

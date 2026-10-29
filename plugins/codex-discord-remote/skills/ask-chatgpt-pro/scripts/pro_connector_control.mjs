@@ -198,7 +198,7 @@ const CURRENT_COMPOSER =
 const CURRENT_SURFACE = 'form[data-thread-find-composer="true"]';
 const CURRENT_ADD_CONTEXT = 'button[data-composer-navigation-target="add-context"]';
 const CURRENT_MODEL =
-  'button[data-codex-intelligence-trigger="true"][data-composer-navigation-target="reasoning"]';
+  'button[data-composer-navigation-target="reasoning"]:is([data-codex-intelligence-trigger="true"], [aria-label="ChatGPT 모델 선택"])';
 const CURRENT_CATALOG_HEADING = CONNECTOR_NAME + " 내 클라우드 플러그인";
 const CURRENT_CONNECTOR_CHIP = [
   'span[contenteditable="false"]',
@@ -346,7 +346,7 @@ async function prepareCurrentConnector(tab) {
       const model = surface.locator(CURRENT_MODEL);
       if ((await model.count()) !== 1 ||
           (await model.getAttribute("aria-haspopup")) !== "menu" ||
-          (await model.innerText()).trim() !== "Pro" ||
+          !/^(?:추론 수준\s+)?Pro$/.test((await model.innerText()).trim()) ||
           (await model.getByText("Pro", { exact: true }).count()) !== 1) return failed(stage);
 
       stage = "connector_picker_unavailable";
@@ -441,7 +441,7 @@ async function prepareCurrentConnector(tab) {
       state: "visible", timeoutMs: 10000,
     });
     if ((await model.getByText("Pro", { exact: true }).count()) !== 1 ||
-        (await model.innerText()).trim() !== "Pro") return failed(stage);
+        !/^(?:추론 수준\s+)?Pro$/.test((await model.innerText()).trim())) return failed(stage);
 
     ready = await observeCurrentComposer(composer, surface);
     readinessFailure = ready.failure;
