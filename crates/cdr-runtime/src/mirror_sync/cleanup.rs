@@ -68,6 +68,7 @@ impl MirrorSynchronizer {
                 .await;
         }
         // A missing Discord room is not permission to drop its pending work mapping.
+        let custody = self.custody(discord_id(row.discord_thread_id)?).await?;
         self.ensure_no_requests(discord_id(row.discord_thread_id)?)?;
         let channel = self
             .remote
@@ -86,15 +87,20 @@ impl MirrorSynchronizer {
                 parent,
             )?;
         }
-        if let Some(channel) = channel {
+        let outcome = if let Some(channel) = channel {
             super::channels::validate(&channel, guild, ChannelType::PublicThread, parent)?;
             self.ensure_no_requests(channel.id)?;
-            self.delete_guarded(channel.id, Some(&row.thread_id))
-                .await?;
+            self.delete_guarded(channel.id, Some(&row.thread_id), &custody)
+                .await?
         } else {
-            self.fence_missing_room(discord_id(row.discord_thread_id)?, Some(&row.thread_id))?;
-        }
+            self.fence_missing_room(
+                discord_id(row.discord_thread_id)?,
+                Some(&row.thread_id),
+                &custody,
+            )?
+        };
         // Retire the mapping only after the approved Discord deletion succeeds.
+        self.validate_before_retirement(&custody, discord_id(row.discord_thread_id)?, outcome)?;
         if !retire_thread_sync(
             &self.mirror_db,
             &row.thread_id,

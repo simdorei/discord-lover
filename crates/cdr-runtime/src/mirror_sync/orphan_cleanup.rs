@@ -59,7 +59,8 @@ impl MirrorSynchronizer {
                 if is_mirrored_channel(&self.mirror_db, Some(db_id(channel.id)?))? {
                     continue;
                 }
-                self.delete_guarded(channel.id, None).await?;
+                let custody = self.custody(channel.id).await?;
+                self.delete_guarded(channel.id, None, &custody).await?;
                 deleted += 1;
             }
         }
@@ -72,8 +73,9 @@ impl MirrorSynchronizer {
                 continue;
             }
             let id = discord_id(row.discord_channel_id)?;
+            let custody = self.custody(id).await?;
             self.ensure_no_requests(id)?;
-            if let Some(channel) = self.remote.channel(id).await? {
+            let outcome = if let Some(channel) = self.remote.channel(id).await? {
                 super::channels::validate(&channel, guild, ChannelType::GuildText, None)?;
                 if !self.remote.thread_inventory(guild, id).await?.is_empty() {
                     return Err(MirrorSyncError::Invalid(format!(
@@ -81,10 +83,11 @@ impl MirrorSynchronizer {
                     )));
                 }
                 self.ensure_no_requests(id)?;
-                self.delete_guarded(id, None).await?;
+                self.delete_guarded(id, None, &custody).await?
             } else {
-                self.fence_missing_room(id, None)?;
-            }
+                self.fence_missing_room(id, None, &custody)?
+            };
+            self.validate_before_retirement(&custody, id, outcome)?;
             if !cdr_store::mapping::retire_project_sync(
                 &self.mirror_db,
                 &row.project_key,

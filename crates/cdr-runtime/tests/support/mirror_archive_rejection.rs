@@ -52,6 +52,32 @@ fn no_dispatch() -> serde_json::Value {
 }
 
 #[tokio::test]
+async fn agy_custody_preserves_archived_rejections_without_fencing_or_retirement() {
+    for corrupt in [false, true] {
+        let temp = tempfile::tempdir().unwrap();
+        let (sync, remote) = fixture(&temp);
+        let db = temp.path().join("mirror.sqlite");
+        let key = rejection(&db, 901, &no_dispatch());
+        let before = ingress::get(&db, &key).unwrap().unwrap();
+        let custody = temp.path().join(".codex_discord_agy.sqlite");
+        if corrupt {
+            std::fs::write(&custody, b"corrupt custody").unwrap();
+        } else {
+            let store = cdr_runtime::agy::store::Store::open(&custody, 1).unwrap();
+            store
+                .begin_container("protected", None, "PublicThread")
+                .unwrap();
+            store.confirm_container("protected", 31).unwrap();
+        }
+        assert!(sync.sync(99, None).await.is_err());
+        assert_eq!(remote.0.lock().unwrap().deletes, 0);
+        assert!(thread_channels(&db, "thread-old").unwrap().is_some());
+        assert_eq!(cdr_store::room_cleanup::phase(&db, 31).unwrap(), None);
+        assert_eq!(ingress::get(&db, &key).unwrap().unwrap(), before);
+    }
+}
+
+#[tokio::test]
 async fn archived_rejected_controls_are_preserved_without_blocking_mirror_cleanup() {
     let temp = tempfile::tempdir().unwrap();
     let (sync, remote) = fixture(&temp);

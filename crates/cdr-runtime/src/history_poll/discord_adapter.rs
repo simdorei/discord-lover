@@ -134,6 +134,7 @@ pub(crate) struct DiscordHistoryCycleIo<'a, B: TurnBackend> {
     context: MessageContext<'a, B>,
     observed_at: SystemTime,
     discard_fence: Option<DiscordHistoryDiscardFence<'a>>,
+    ownership: Option<Arc<crate::agy::ownership::AgyOwnership>>,
 }
 
 impl<'a, B: TurnBackend> DiscordHistoryCycleIo<'a, B> {
@@ -158,7 +159,27 @@ impl<'a, B: TurnBackend> DiscordHistoryCycleIo<'a, B> {
             context,
             observed_at,
             discard_fence: None,
+            ownership: None,
         }
+    }
+
+    pub(crate) fn with_ownership(
+        mut self,
+        ownership: Option<Arc<crate::agy::ownership::AgyOwnership>>,
+    ) -> Self {
+        self.ownership = ownership;
+        self
+    }
+
+    fn require_codex(&self, channel: u64) -> Result<(), MessageAdmissionError> {
+        if self
+            .ownership
+            .as_ref()
+            .is_some_and(|owner| !owner.classify(channel).permits_codex())
+        {
+            return Err(MessageAdmissionError::OwnershipChanged { channel });
+        }
+        Ok(())
     }
 
     #[must_use]
@@ -235,6 +256,7 @@ impl<B: TurnBackend> HistoryPollCycleIo for DiscordHistoryCycleIo<'_, B> {
         item: HistoryMessagePayload,
         purpose: HistoryClaimPurpose,
     ) -> Result<HistoryClaimOutcome<HistoryAdmittedMessage>, MessageAdmissionError> {
+        self.require_codex(item.message.channel_id.get())?;
         let classified = self.adapter.adapt(*item.message)?;
         let HistoryPollItem::Candidate(item) = classified.kind else {
             return Ok(HistoryClaimOutcome::Lost);
@@ -264,6 +286,9 @@ impl<B: TurnBackend> HistoryPollCycleIo for DiscordHistoryCycleIo<'_, B> {
                 )
                 .into());
             };
+            // Fetch and claim may both have yielded to topology updates. Do not
+            // consume recovery progress or execute under obsolete ownership.
+            self.require_codex(report_target.channel_id.get())?;
             process_with_error_report(
                 report_target,
                 admitted,
@@ -297,3 +322,6 @@ mod settings_rejection_tests;
 #[cfg(test)]
 #[path = "new_prompt_history_tests.rs"]
 mod new_prompt_history_tests;
+
+#[cfg(test)]
+mod ownership_tests;

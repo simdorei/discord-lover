@@ -94,6 +94,9 @@ pub struct MirrorSynchronizer {
     remote: Arc<dyn MirrorTransport>,
     guild_id: Option<u64>,
     lock: Mutex<()>,
+    ownership: Arc<crate::agy::ownership::AgyOwnership>,
+    #[cfg(test)]
+    before_retirement: Option<Arc<dyn Fn(u64) + Send + Sync>>,
 }
 
 impl MirrorSynchronizer {
@@ -104,13 +107,46 @@ impl MirrorSynchronizer {
         remote: Arc<dyn MirrorTransport>,
         guild_id: Option<u64>,
     ) -> Self {
+        let root = mirror_db
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
+        let ownership = crate::agy::ownership::AgyOwnership::for_root(root, guild_id.unwrap_or(0));
         Self {
             state_db,
             mirror_db,
             remote,
             guild_id,
             lock: Mutex::new(()),
+            ownership,
+            #[cfg(test)]
+            before_retirement: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_ownership(mut self, ownership: Arc<crate::agy::ownership::AgyOwnership>) -> Self {
+        self.ownership = ownership;
+        self
+    }
+
+    async fn custody(
+        &self,
+        channel: u64,
+    ) -> Result<crate::agy::ownership::CleanupPermit, MirrorSyncError> {
+        self.ownership
+            .ensure_loaded(&self.mirror_db)
+            .await
+            .map_err(|_| MirrorSyncError::CleanupProtected {
+                channel,
+                reason: "unavailable AGY ownership",
+            })?;
+        self.ownership
+            .cleanup(channel, &self.remote)
+            .await
+            .map_err(|_| MirrorSyncError::CleanupProtected {
+                channel,
+                reason: "AGY/uncertain/conflicting ownership",
+            })
     }
 }
 

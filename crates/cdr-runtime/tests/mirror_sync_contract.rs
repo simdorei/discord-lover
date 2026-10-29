@@ -262,6 +262,58 @@ fn fixture(temp: &tempfile::TempDir) -> (MirrorSynchronizer, Arc<Remote>) {
 }
 
 #[tokio::test]
+async fn full_codex_sync_preserves_same_bot_agy_category_and_native_conversation() {
+    let temp = tempfile::tempdir().unwrap();
+    let (sync, remote) = fixture(&temp);
+    let agy_path = temp.path().join("agy.sqlite");
+    let agy = cdr_runtime::agy::store::Store::open(&agy_path, 1).unwrap();
+    agy.create_session(82, "alpha", temp.path()).unwrap();
+    agy.save_conversation(82, "agy-native-conversation")
+        .unwrap();
+    {
+        let mut state = remote.0.lock().unwrap();
+        // The same bot owns both active and archived AGY threads. Even a project
+        // name matching Codex must stay outside the Codex category's ownership.
+        for room in [
+            channel(80, None, ChannelType::GuildCategory, "AGY"),
+            channel(81, Some(80), ChannelType::GuildText, "codex-alpha"),
+            channel(82, Some(81), ChannelType::PublicThread, "AGY active"),
+            channel(83, Some(81), ChannelType::PublicThread, "AGY archived"),
+        ] {
+            state.channels.insert(room.id, room);
+        }
+        state.channels.get_mut(&83).unwrap().archived = true;
+    }
+    sync.sync(99, None).await.unwrap();
+    sync.sync(99, None).await.unwrap();
+    let state = remote.0.lock().unwrap();
+    assert!(
+        !state.channels.contains_key(&31),
+        "Codex's own stale cleanup must still run"
+    );
+    for id in [80, 81, 82, 83] {
+        assert!(state.channels.contains_key(&id));
+    }
+    assert!(state.channels[&83].archived);
+    drop(state);
+    drop(agy);
+    let reopened = cdr_runtime::agy::store::Store::open(&agy_path, 1).unwrap();
+    assert_eq!(
+        reopened
+            .session(82)
+            .unwrap()
+            .unwrap()
+            .conversation
+            .as_deref(),
+        Some("agy-native-conversation")
+    );
+    assert!(
+        !cdr_store::mapping::is_mirrored_channel(&temp.path().join("mirror.sqlite"), Some(81))
+            .unwrap()
+    );
+}
+
+#[tokio::test]
 async fn full_sync_creates_renames_and_deletes_obsolete_discord_threads() {
     let temp = tempfile::tempdir().unwrap();
     let (sync, remote) = fixture(&temp);
@@ -393,3 +445,6 @@ async fn missing_stored_thread_is_recreated_and_remapped() {
 
 #[path = "support/mirror_archive_rejection.rs"]
 mod archive_rejection;
+
+#[path = "support/mirror_agy_custody.rs"]
+mod agy_custody;

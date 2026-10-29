@@ -20,6 +20,12 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<(), (u8, String)> {
     let raw_args: Vec<_> = std::env::args_os().skip(1).collect();
+    #[cfg(windows)]
+    if raw_args.len() == 1 && raw_args[0] == "--agy-control" {
+        return cdr_runtime::agy::control::cli()
+            .await
+            .map_err(|error| (1, error.to_string()));
+    }
     if raw_args.first().is_some_and(|arg| arg == "--admin") {
         let output = cdr_runtime::admin::run(raw_args.into_iter().skip(1))
             .await
@@ -69,7 +75,14 @@ async fn run() -> Result<(), (u8, String)> {
     let config =
         RuntimeConfig::from_map(&environment, args.cli).map_err(|error| (1, error.to_string()))?;
     if args.cli.check_config {
+        let root = std::env::current_dir().map_err(|error| (1, error.to_string()))?;
+        let agy = cdr_runtime::agy::config::AgyConfig::from_environment(&environment, &root)
+            .map_err(|error| (1, error.to_string()))?;
+        if agy.is_some() && config.guild_id.is_none() {
+            return Err((1, "DISCORD_GUILD_ID is required for AGY".into()));
+        }
         println!("{}", config_summary(&config));
+        println!("agy_enabled={}", agy.is_some());
         return Ok(());
     }
     if args.backup_store {

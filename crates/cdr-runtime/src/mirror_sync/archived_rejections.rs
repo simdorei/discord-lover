@@ -14,6 +14,7 @@ impl MirrorSynchronizer {
         archived: &ThreadInfo,
     ) -> Result<bool, MirrorSyncError> {
         let room = discord_id(row.discord_thread_id)?;
+        let custody = self.custody(room).await?;
         if let Some(reason) = room_cleanup::archived_rejections::pending_reason(
             &self.mirror_db,
             row.discord_thread_id,
@@ -47,6 +48,7 @@ impl MirrorSynchronizer {
             super::channels::validate(channel, guild, ChannelType::PublicThread, Some(parent))?;
         }
         self.validate_exact_mapping(&row.thread_id, room, parent)?;
+        super::delete_guard::validate_custody(&custody, room)?;
         let token = room_cleanup::archived_rejections::begin(
             &self.mirror_db,
             db_id(room)?,
@@ -56,11 +58,14 @@ impl MirrorSynchronizer {
             || verify_archive(store, archived),
         )
         .map_err(super::delete_guard::cleanup_begin_error)?;
-        if remote.is_some() {
-            self.dispatch_guarded_delete(room, &token).await?;
+        let outcome = if remote.is_some() {
+            self.dispatch_guarded_delete(room, &token, &custody).await?
         } else {
+            super::delete_guard::validate_custody(&custody, room)?;
             room_cleanup::complete(&self.mirror_db, db_id(room)?, &token)?;
-        }
+            super::delete_guard::CleanupOutcome::ObservedMissing
+        };
+        self.validate_before_retirement(&custody, room, outcome)?;
         if !mapping::retire_thread_sync(
             &self.mirror_db,
             &row.thread_id,

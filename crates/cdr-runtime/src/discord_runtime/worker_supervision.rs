@@ -99,6 +99,10 @@ pub(super) struct WorkerShutdownReport {
 }
 
 impl WorkerShutdownReport {
+    pub(super) fn with_optional_cleanup(mut self, result: Result<(), DiscordRuntimeError>) -> Self {
+        self.cleanup = self.cleanup.and(result);
+        self
+    }
     #[cfg(test)]
     pub(super) fn from_parts(
         trigger: Option<Result<(), DiscordRuntimeError>>,

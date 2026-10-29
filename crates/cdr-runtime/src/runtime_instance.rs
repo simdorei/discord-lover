@@ -28,6 +28,7 @@ pub enum RuntimeInstanceError {
 
 pub struct RuntimeInstanceGuard {
     lock_path: PathBuf,
+    _filesystem_lock: fs::File,
     #[cfg(windows)]
     _native: cdr_windows_native::SingleInstance,
     #[cfg(unix)]
@@ -39,6 +40,18 @@ pub struct RuntimeInstanceGuard {
 impl RuntimeInstanceGuard {
     pub fn acquire(root: &Path) -> Result<Self, RuntimeInstanceError> {
         fs::create_dir_all(root).map_err(|source| io_error(root, source))?;
+        // File locks cover other Windows sessions and canonical path aliases too.
+        let exclusive_path = root.join(".codex_discord_rust.exclusive.lock");
+        let filesystem_lock = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&exclusive_path)
+            .map_err(|source| io_error(&exclusive_path, source))?;
+        filesystem_lock
+            .try_lock()
+            .map_err(|_| RuntimeInstanceError::AlreadyRunning)?;
         let lock_path = root.join(LOCK_NAME);
         #[cfg(windows)]
         let native = acquire_windows(root)?;
@@ -56,6 +69,7 @@ impl RuntimeInstanceGuard {
         )?;
         Ok(Self {
             lock_path,
+            _filesystem_lock: filesystem_lock,
             #[cfg(windows)]
             _native: native,
             #[cfg(unix)]

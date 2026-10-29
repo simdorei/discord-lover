@@ -41,6 +41,7 @@ impl MirrorSynchronizer {
         self.ensure_cleanup_reconciled()?;
         self.ensure_exact_pending(thread_id, room)?;
         if cdr_store::room_cleanup::confirmed_target(&self.mirror_db, db_id(room)?, thread_id)? {
+            let custody = self.custody(room).await?;
             self.ensure_no_requests(room)?;
             self.ensure_exact_pending(thread_id, room)?;
             if self.remote.channel(room).await?.is_some() {
@@ -64,6 +65,11 @@ impl MirrorSynchronizer {
                 return Ok(());
             }
             self.validate_exact_mapping(thread_id, room, parent)?;
+            self.validate_before_retirement(
+                &custody,
+                room,
+                super::delete_guard::CleanupOutcome::PreviouslyConfirmed,
+            )?;
             if !retire_thread_sync(&self.mirror_db, thread_id, db_id(room)?, started)? {
                 return Err(MirrorSyncError::Invalid(
                     "confirmed cleanup mapping changed; preserved".into(),

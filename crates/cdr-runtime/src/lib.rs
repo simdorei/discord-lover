@@ -7,6 +7,7 @@ extern crate self as cdr_runtime;
 pub mod action_executor;
 pub mod action_ui;
 pub mod admin;
+pub mod agy;
 pub mod app_backend;
 pub mod archive_delete;
 #[cfg(test)]

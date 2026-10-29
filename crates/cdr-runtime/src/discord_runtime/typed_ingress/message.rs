@@ -19,6 +19,7 @@ pub(super) async fn run(
     else {
         return Ok(());
     };
+    let (resume, mut resolved) = mpsc::channel(32);
     loop {
         if *shutdown.borrow() {
             return Ok(());
@@ -37,9 +38,19 @@ pub(super) async fn run(
                 continue;
             }
             message = messages.recv() => message,
+            message = resolved.recv() => message,
         };
         let Some(envelope) = envelope else {
             return Err(DiscordRuntimeError::TypedIngressClosed("message"));
+        };
+        let envelope = if let Some(agy) = &context.agy {
+            let Some(envelope) = agy.message(envelope, identity.user_id.get(), resume.clone())
+            else {
+                continue;
+            };
+            envelope
+        } else {
+            envelope
         };
         let process = Box::pin(handle_message_create(
             envelope.event.0,

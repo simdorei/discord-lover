@@ -12,6 +12,7 @@ impl GatewayIngress {
         nonce: Option<u64>,
         observer: impl FnOnce(),
     ) -> PublishOutcome {
+        self.topology.publish(&event);
         publish_gateway_event_identity(&event, &self.identity);
         observer();
         match event {

@@ -137,6 +137,12 @@ try {
     $statusItem.Enabled = $false
     [void]$menu.Items.Add($statusItem)
 
+    # Optional feature initialization cannot break existing restart/status controls.
+    try {
+        . (Join-Path $ScriptDir 'codex-discord-tray-agy.ps1')
+        Initialize-CdrAgyTray -Menu $menu -Root $ScriptDir
+    } catch { Write-LauncherLog "tray_agy_unavailable type=$($_.Exception.GetType().FullName)" }
+
     $openLogItem = New-Object Windows.Forms.ToolStripMenuItem
     $openLogItem.Text = 'Open bot log'
     $openLogItem.Add_Click({
@@ -198,6 +204,7 @@ try {
     Write-LauncherLog "tray_fatal type=$($_.Exception.GetType().FullName) error=$($_.Exception.Message)"
     throw
 } finally {
+    try {if (Get-Command Close-CdrAgyTray -ErrorAction SilentlyContinue) {Close-CdrAgyTray}} catch { }
     # Each release is independent: partial initialization must not leak ownership.
     if ($null -ne $timer) { try { $timer.Stop() } catch { }; try { $timer.Dispose() } catch { } }
     if ($null -ne $notify) { try { $notify.Visible = $false } catch { }; try { $notify.Dispose() } catch { } }

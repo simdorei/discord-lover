@@ -46,6 +46,21 @@ use workers::{
 
 const INTERACTION_QUEUE_CAPACITY: usize = 64;
 
+#[cfg(test)]
+pub(crate) use typed_ingress::agy_isolation_contract::assert_common_consumers_survive;
+#[cfg(test)]
+pub(crate) use typed_ingress::run_agy_probe_lane;
+
+#[cfg(test)]
+pub(crate) async fn run_agy_performance_lane(
+    receiver: mpsc::Receiver<cdr_discord::gateway::ingress::InteractionIngress>,
+    routing: Option<crate::agy::routing::AgyRouting>,
+    samples: mpsc::UnboundedSender<(u64, usize, f64)>,
+    shutdown: watch::Receiver<bool>,
+) -> Result<(), DiscordRuntimeError> {
+    typed_ingress::run_agy_performance_lane(receiver, routing, samples, shutdown).await
+}
+
 fn request_remote_handoff_if_needed(paths: &RuntimePaths, control: Option<&RemoteAgentControl>) {
     if crate::operation_marker::restart_requested(&paths.root)
         && let Some(control) = control
@@ -65,6 +80,12 @@ pub async fn run(
     let root = std::env::current_dir().map_err(DiscordRuntimeError::CurrentDirectory)?;
     let inputs = discover_inputs(environment, root)?;
     let paths = RuntimePaths::resolve(environment, &inputs)?;
+    let agy_settings = paths.root.join(
+        environment
+            .get("DISCORD_AGY_CONFIG")
+            .filter(|p| !p.trim().is_empty())
+            .map_or("codex-agy.json", String::as_str),
+    );
     let _runtime_instance = RuntimeInstanceGuard::acquire(&paths.root)?;
     let drain_controller = Arc::new(
         crate::restart_readiness::drain_controller::RuntimeDrainController::initialize(
@@ -115,12 +136,44 @@ pub async fn run(
     )
     .await?;
     let http = gateway.http();
-    executor
-        .configure_mirror_sync(Arc::clone(&http), config.guild_id)
-        .map_err(|error| DiscordRuntimeError::MirrorSyncConfiguration(error.to_string()))?;
     let autocomplete = Arc::new(load_autocomplete(&server).await?);
     let attachment_client = Arc::new(reqwest::Client::new());
     let (completion_shutdown, completion_shutdown_rx) = watch::channel(false);
+    let agy = crate::agy::manager::AgyManager::start(
+        crate::agy::manager::Resources {
+            root: paths.root.clone(),
+            mirror_db: paths.mirror_db.clone(),
+            settings_path: agy_settings,
+            policy: Arc::clone(&config),
+            http: Arc::clone(&http),
+            admission: admission_gate.clone(),
+            runtime_uuid: drain_controller.runtime_id().to_owned(),
+            topology: gateway.topology(),
+            #[cfg(test)]
+            remote: None,
+        },
+        completion_shutdown.subscribe(),
+    )
+    .await;
+    executor
+        .configure_mirror_with_ownership(
+            Arc::clone(&http),
+            config.guild_id,
+            Arc::clone(&agy.handle.ownership),
+        )
+        .map_err(|error| DiscordRuntimeError::MirrorSyncConfiguration(error.to_string()))?;
+    let agy_routing = crate::agy::routing::AgyRouting::start(
+        Arc::clone(&agy.handle),
+        Arc::clone(&config),
+        Arc::clone(&http),
+        completion_shutdown.subscribe(),
+    );
+    #[cfg(windows)]
+    let agy_control = crate::agy::control::Control::start(
+        Arc::clone(&agy.handle),
+        paths.root.clone(),
+        completion_shutdown.subscribe(),
+    );
     let (heartbeat_shutdown, heartbeat_shutdown_rx) = watch::channel(false);
     let (worker_exit_notifier, mut worker_exits) = exit_channel();
     let (work_sender, work_receiver) = mpsc::channel(INTERACTION_QUEUE_CAPACITY);
@@ -142,7 +195,8 @@ pub async fn run(
             Arc::clone(&attachment_client),
             interaction_resources,
             admission_gate.clone(),
-        ),
+        )
+        .with_agy(Some(agy_routing.routing.clone())),
         completion_shutdown.subscribe(),
         worker_exit_notifier.clone(),
     )
@@ -276,6 +330,13 @@ pub async fn run(
         gateway.shutdown_for_cause(non_heartbeat_deadline, triggering_shard),
         workers.shutdown_for_cause(non_heartbeat_deadline, triggering_worker),
     );
+    let agy_result = agy_routing
+        .join(non_heartbeat_deadline)
+        .await
+        .and(agy.join(non_heartbeat_deadline).await);
+    #[cfg(windows)]
+    let agy_result = agy_result.and(agy_control.join(non_heartbeat_deadline).await);
+    let workers_result = workers_result.with_optional_cleanup(agy_result.map_err(Into::into));
     let close_result =
         complete_before_shutdown_deadline(server_close_deadline, "app-server", server.close())
             .await;

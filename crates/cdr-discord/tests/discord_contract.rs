@@ -37,11 +37,12 @@ fn dc1_slash_inventory_preserves_supported_python_commands_but_excludes_ipc() {
         .collect::<Vec<_>>();
     // R09 exposes the existing prefix approval redisplay via slash too.
     assert!(normal.contains(&"approval"));
+    assert!(normal.contains(&"stop"));
     assert_eq!(
         normal
             .iter()
             .copied()
-            .filter(|name| *name != "approval")
+            .filter(|name| !matches!(*name, "approval" | "stop"))
             .collect::<Vec<_>>(),
         expected
     );
@@ -52,10 +53,11 @@ fn dc1_slash_inventory_preserves_supported_python_commands_but_excludes_ipc() {
         .map(|command| command.name.as_str())
         .collect::<Vec<_>>();
     assert!(qa.contains(&"approval"));
+    assert!(qa.contains(&"stop"));
     assert_eq!(
         qa.iter()
             .copied()
-            .filter(|name| *name != "approval")
+            .filter(|name| !matches!(*name, "approval" | "stop"))
             .collect::<Vec<_>>(),
         expected_qa
     );

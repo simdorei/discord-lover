@@ -3,6 +3,7 @@ use super::{GatewayIngress, ReceiveErrorIngress, ReceiveErrorPublishOutcome, una
 impl GatewayIngress {
     #[must_use]
     pub fn publish_receive_error(&self, shard: u32, message: String) -> ReceiveErrorPublishOutcome {
+        self.topology.invalidate();
         let item = ReceiveErrorIngress { shard, message };
         match self.receive_errors.try_send(item) {
             Ok(()) => ReceiveErrorPublishOutcome::Accepted,

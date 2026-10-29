@@ -148,6 +148,7 @@ pub fn plan_slash(invocation: &SlashInvocation) -> Result<CommandAction, Command
         }
 
         "where" => CommandAction::Where,
+        "stop" => CommandAction::Stop { reference: None },
         "context" => CommandAction::Context {
             all_threads: invocation.boolean("all_threads").unwrap_or(false),
             refresh: invocation.boolean("refresh").unwrap_or(false),

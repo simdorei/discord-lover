@@ -26,6 +26,8 @@ use crate::runtime_paths::{PathDiscoveryError, RuntimePathError};
 #[derive(Debug, Error)]
 pub enum DiscordRuntimeError {
     #[error(transparent)]
+    Agy(#[from] crate::agy::AgyError),
+    #[error(transparent)]
     Discovery(#[from] PathDiscoveryError),
     #[error(transparent)]
     Paths(#[from] RuntimePathError),

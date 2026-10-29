@@ -1,0 +1,335 @@
+{
+  "base": "2aaddf87ee037d3ae6dfb5d9d87489430d6ce74e",
+  "time_utc": "2026-10-28T17:46:55.721026+00:00",
+  "scope": "R2 source frozen; progress/review logs are outside this source manifest",
+  "files": [
+    {
+      "path": "Cargo.lock",
+      "sha256": "f4bf162e56ce355ec548d8ff3c66f645f808b95d0b2901d8fe25a7f69a4bc322"
+    },
+    {
+      "path": "README.md",
+      "sha256": "fad916a576db668850b7fc6cf2da43e080a00d8987e4733b2a7b5d9bd1292668"
+    },
+    {
+      "path": "codex-discord-tray-agy.ps1",
+      "sha256": "560007120783e3c0dbc0b362701cae87be8938acb9b1c7833e51d5204a30b62e"
+    },
+    {
+      "path": "codex-discord-tray.ps1",
+      "sha256": "c5e6af25a0fc6315b19de6ecdad22561f10d98afc50ef91ef6be193c313e8a5c"
+    },
+    {
+      "path": "crates/cdr-discord/src/commands.rs",
+      "sha256": "9d428217137f014b6194c3475c9f4b1c2da5e2cebd77784e94f9a0a8fb4c9dee"
+    },
+    {
+      "path": "crates/cdr-discord/src/gateway.rs",
+      "sha256": "2890fa07c4b7befb873b40027061ac991136a8dacccbe0bce46fef8a3c063685"
+    },
+    {
+      "path": "crates/cdr-discord/src/gateway/ingress.rs",
+      "sha256": "b94477163ebf4040570f1dfd36175de163a2f2c8a7201be0769010de6a0640d6"
+    },
+    {
+      "path": "crates/cdr-discord/src/gateway/ingress/gaps.rs",
+      "sha256": "61d4e7b824b2b961e5488dcc8bda7fe3da6c88e3d15a01e86ad04758f8fccb9d"
+    },
+    {
+      "path": "crates/cdr-discord/src/gateway/ingress/publication.rs",
+      "sha256": "079493fa8a562fd1790027369486edf029046962df64df14b9959921625b277b"
+    },
+    {
+      "path": "crates/cdr-discord/src/gateway/ingress/receive_error.rs",
+      "sha256": "b330bcd2704acf51a45631a7f3d4f4c61081b8a0f11e36a493920a97e78cac2c"
+    },
+    {
+      "path": "crates/cdr-discord/src/gateway/topology.rs",
+      "sha256": "3bd6c0f0a0ccdb45fd9e128e3fe3d8885a060207d833f26091b68863ccbbf45a"
+    },
+    {
+      "path": "crates/cdr-discord/tests/discord_contract.rs",
+      "sha256": "f37d3b6191a0694d3e8d0785b6f3eea2fbd66911e5ac0a150d6cf529595a2ae8"
+    },
+    {
+      "path": "crates/cdr-discord/tests/slash_commands_contract.rs",
+      "sha256": "98a4a509e06923e99594da82b8879b394dcfd2c230f07bef22034148471d58b4"
+    },
+    {
+      "path": "crates/cdr-runtime/examples/mirror_absent_maintenance.rs",
+      "sha256": "7ee052603d759b79204fd87a772eaa9261a3dc08f0550ce1a6a3158cde5ecf19"
+    },
+    {
+      "path": "crates/cdr-runtime/src/action_executor/mirror_action.rs",
+      "sha256": "d4cc284e3aa874b70386faec90e97e5579e5d55cd3127b9e24bce51751756f30"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy.rs",
+      "sha256": "10b01af05578c5e011c8fde9d65c345a72fc6fe49794bef37a31bf06d38c49f0"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/blocking.rs",
+      "sha256": "684e2ac9e0bcab158395de6fab66e30c0af892259bd479d4a76a17ec1c2080ae"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/config.rs",
+      "sha256": "907062d418da619a78997c9491b17dda3fe9b8362169e578b856baf756f1e3e5"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/configuration.rs",
+      "sha256": "62cddf83746c66625bdacda948463fbd38b0f0e8ceeb1297c6151232ddbffe08"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/control.rs",
+      "sha256": "abdd050f19807c7c815193867f09fddc229257fd428641b645f4773624f804c9"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/control/ledger.rs",
+      "sha256": "fd3daf4ef3648cd110fdd7eaf50417b741ffe28d3ec8ef4f64828025d0b37106"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/control/tests.rs",
+      "sha256": "b03c656ae40dce6309a0c6174e0f2be87697bd7d2d958b1df955a7653228e554"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/database.rs",
+      "sha256": "f76199257ecd16fc44622e37e2163a7761d7d887e8821cee14e0315635b9973b"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/history.rs",
+      "sha256": "9a0cd90403ffece82e278dd27db522406097d5b53cb5d45e4b49ad27a25fc910"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/ingress.rs",
+      "sha256": "4a0d93982bea2aa172c176c3ca06348a56f890c1b0dc0aa4b64116f99044b470"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/lifecycle.rs",
+      "sha256": "1b86f99617843abf0d950bfef06d0fad6c25bb7b8f1190c25beedc5b6595ee49"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/manager.rs",
+      "sha256": "281c1e20ed05aa426e48ff605e123df22e7f0bc9c47175f7a6f2f10b10d48e72"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/manager/activation.rs",
+      "sha256": "e6d79d8f51b81cee5691f8bd341f7e07239628e5cd98df38975b2fd32de3b46a"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/manager/login.rs",
+      "sha256": "3b4fdd2d23e5b3f0094d46012e42df9674926b8ceed54ab6b67841ef5010f075"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/manager/tests.rs",
+      "sha256": "3be9383ea4deda8e009e19a1a5802316a796c045426fceeda77ab8317f5c3ac3"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/manager/tests/failure_quiescence.rs",
+      "sha256": "f6e99ddd41cae10e8d4dba6f888d89af0d1bd17619a46412b66495b43d623922"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/ownership.rs",
+      "sha256": "5fd982f84c5342f46b508dd1ffaae4746959dd7cb1b99c9f55af409da112aec6"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/ownership/disk.rs",
+      "sha256": "496a3a3a810b9efdc9a179e1edfb5ef9cded4e63881f2109a459ba1904b90025"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/processes.rs",
+      "sha256": "933aa41c982065fa04f79a6a97a6fd6ef86764ad9880a423637e78f2f447acc8"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/rooms.rs",
+      "sha256": "edd2a639aae2ad3df13459ffe264a84d4c808736a3c8f70d542ec8993a162b20"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/routing.rs",
+      "sha256": "3a391c294f8718aad27d2b4cdf8f737d526832b6afba859e156239b57e4714f9"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/routing/interaction.rs",
+      "sha256": "98a4e818073ff48fa76efb90cf6dcee06884013878afaa09a5288fab20bc1fc1"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/routing/tests.rs",
+      "sha256": "e95773b2870d69603309e986f3eda497a5ffb1bfbc4a3562a8b736679f669b80"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/routing/tests/revision_contracts.rs",
+      "sha256": "dc70c518b4c65c72261456b08ea0ea5c832fb516ba83dcb5a338de5146fa8132"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/runner.rs",
+      "sha256": "ec8484a306ffeb38fa31910576bf8e7d46f1c91bd5e3ef56578b0287925640a4"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/runner/process.rs",
+      "sha256": "9f8e1ff49699e48c642ee1abe3a8cb510547c9e32b21da12f357cefcc9cc12b6"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/runner/tests.rs",
+      "sha256": "7642520e86f4ec43bf7dd7d9f0c62d18c37ae01e4e1269d905909704f3cccd9c"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/store.rs",
+      "sha256": "c5d8d9a210f706f2e3a24385f4a9c921a0083c3df6426460cf6a17d5df339696"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/tests.rs",
+      "sha256": "46377670676c3a2bd223a634e4f82e9d110c7a6df60781b7f87009182014fcf8"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/tests/lifecycle_contract.rs",
+      "sha256": "9e6c399934c773d8f973d8612c40e7af721bb1483c271a9eaf20115667d2cf12"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/tests/support.rs",
+      "sha256": "8e01f038b873f5bb50971ca02c58eb717de27c6ae8d5bbd2fc076227d770476e"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/transport.rs",
+      "sha256": "91050733708ff8ccd056b060653a478ecd0b34e2192cec49b39b3e17e605f488"
+    },
+    {
+      "path": "crates/cdr-runtime/src/agy/worker.rs",
+      "sha256": "5f7a6e536c2ed4869302609a39e60ce3e4f9897c29dd72028d14aedef5c3cda8"
+    },
+    {
+      "path": "crates/cdr-runtime/src/command_plan.rs",
+      "sha256": "558ce6cacd0b1449716fca9cd979d1f35028a928425a1bfa0257f228079314c2"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime.rs",
+      "sha256": "e3d351deab5d3708521725439de76b396733dfd36b3a64fe70ee38fcb6134a16"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime/error.rs",
+      "sha256": "be5c3468f98548e6c2e9c4b8851f158e89bc0c6af1b10a587dd51b5806ea7194"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime/typed_ingress.rs",
+      "sha256": "0bda77b6cba94d8ba6ce0c635ab9fb75314a77dc9de6c8480171705960c870f3"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime/typed_ingress/agy_isolation_contract.rs",
+      "sha256": "aec18cd51f2b9bd595b733d07945aeedc754fdfd512355f35ac796eb87e19b2a"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime/typed_ingress/context.rs",
+      "sha256": "5939112157a3b453f7eab66a7519577eec55c8e1d38e2661cf3de3d2b405c756"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime/typed_ingress/history/cycle.rs",
+      "sha256": "6cb60f1a404a32ab3650c4533af2ab1648bea681def52dc7d1a4806ce17d8255"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime/typed_ingress/history/gap.rs",
+      "sha256": "f02a98c431375eb741e21543e5b4fd68081345804761c58e7b20cde36f211b44"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime/typed_ingress/interaction.rs",
+      "sha256": "a797ad4b112098097696d27c99b67dacd8bb34dc35464725b4125336307b8b57"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime/typed_ingress/message.rs",
+      "sha256": "5dba123493647a4296c6e5b4c815f43ea0b52822f324ad6a5abce3f533368e85"
+    },
+    {
+      "path": "crates/cdr-runtime/src/discord_runtime/worker_supervision.rs",
+      "sha256": "a2001ce249e2a94530e1dc330e0ac3924a64593ce5c5dbf44ca6007ea035fb6a"
+    },
+    {
+      "path": "crates/cdr-runtime/src/history_poll/discord_adapter.rs",
+      "sha256": "7bcc6d7ec586e4aae1073247e33919fab8b9ec8b5de05a3c883e1f1fd731f703"
+    },
+    {
+      "path": "crates/cdr-runtime/src/history_poll/discord_adapter/ownership_tests.rs",
+      "sha256": "027869c3e5c742021539967e93b7c838dc7b932f6f2865f7adfab8be3c1ba112"
+    },
+    {
+      "path": "crates/cdr-runtime/src/lib.rs",
+      "sha256": "30f9d71337ef79c5fc2abfb01be009177cfb3e6e609a938ae8eee1fb480c6870"
+    },
+    {
+      "path": "crates/cdr-runtime/src/main.rs",
+      "sha256": "beefde307f0237bb34395250d35dbe0e97422e361809ddce1e094b759aa5cf98"
+    },
+    {
+      "path": "crates/cdr-runtime/src/message_worker/admission.rs",
+      "sha256": "52c792e193191db9d1b3c64f130c9de7a4091f1d1d38b82ff94d2ac065965445"
+    },
+    {
+      "path": "crates/cdr-runtime/src/mirror_sync.rs",
+      "sha256": "4472c72822d3600c02d7bed74511a11a008fd4c60505549af125aa1d3839da1d"
+    },
+    {
+      "path": "crates/cdr-runtime/src/mirror_sync/archived_rejections.rs",
+      "sha256": "1d0f7552d82de5b1a3a50d88bc4835b735c8fc4d96c19547bfd814fb2b6de137"
+    },
+    {
+      "path": "crates/cdr-runtime/src/mirror_sync/cleanup.rs",
+      "sha256": "5594f4b565d04f631ef813849ff46506cf3ee11f3dee2b7aad92abb8faeb970c"
+    },
+    {
+      "path": "crates/cdr-runtime/src/mirror_sync/delete_guard.rs",
+      "sha256": "787cce4bdcbfc76cb2c49472d1c79d0fdaa02c4972d6ecf2bf5b2e785f109193"
+    },
+    {
+      "path": "crates/cdr-runtime/src/mirror_sync/delete_guard/tests.rs",
+      "sha256": "13cf93f1a5ccac5fff4f3154a104d78ee0a1579f062b09f723a2a885e979fccc"
+    },
+    {
+      "path": "crates/cdr-runtime/src/mirror_sync/exact_cleanup.rs",
+      "sha256": "c0eb115b701c933f16befa0bb2b91743c34a45191414cc1c637ff86806aff6dd"
+    },
+    {
+      "path": "crates/cdr-runtime/src/mirror_sync/orphan_cleanup.rs",
+      "sha256": "c1af79a2c6990f8b9f95484bad49252ac3f00a219bc10e74ac6c60044c155d46"
+    },
+    {
+      "path": "crates/cdr-runtime/src/runtime_instance.rs",
+      "sha256": "914043e4d91225352c86a02c64c3c1a277fdf640a92794e0125dec95dd3cda36"
+    },
+    {
+      "path": "crates/cdr-runtime/tests/mirror_sync_contract.rs",
+      "sha256": "99a5736a9fc47a684de23fc51b8f10d041fad9e39daa669d2fb514402f824fd9"
+    },
+    {
+      "path": "crates/cdr-runtime/tests/support/mirror_agy_custody.rs",
+      "sha256": "214d4eac2eb1b32d9cad0af93c07f6f13db929291c6c10b1b6a26cd548792b60"
+    },
+    {
+      "path": "crates/cdr-runtime/tests/support/mirror_archive_rejection.rs",
+      "sha256": "c40a89c0773ea5f795c4466b1756687815bb68fe50b57d8867eb22cf9f0a0a90"
+    },
+    {
+      "path": "crates/cdr-runtime/tests/support/mirror_deadline.rs",
+      "sha256": "93ff4df02db742149dfe76391f01a798fc3d76bdecc31c7a54e0b019b2115fb5"
+    },
+    {
+      "path": "crates/cdr-runtime/tests/windows_agy_tray_contract.rs",
+      "sha256": "d0eb61d465a3b79f68e4a91399d957fb489bfab03dc32bb7adc2a1af26b754e8"
+    },
+    {
+      "path": "crates/cdr-windows-native/Cargo.toml",
+      "sha256": "71ee64d2c95cf5ea773b252e0f86c1560b60f9369028d1c56d5a7736359f203a"
+    },
+    {
+      "path": "crates/cdr-windows-native/src/lib.rs",
+      "sha256": "271d91d131a5dd57f2e5260cb344bcc259f6a7bab4cec0179e610065e2c6095b"
+    },
+    {
+      "path": "crates/cdr-windows-native/src/local_control.rs",
+      "sha256": "791e47a2347880fec6d110b3b899c01194629068d4801f5fce694f703347c61b"
+    },
+    {
+      "path": "docs/agy-discord.md",
+      "sha256": "f24222891ddde767f00432d90744e9930414689f45db0cb593e2ce1a8ddc2512"
+    },
+    {
+      "path": "docs/agy-optional-lifecycle-plan.md",
+      "sha256": "3a5d73040aa20e7cd8bba904251902a1a171a2c1c5ca8dfac2bc86e27f478c96"
+    }
+  ]
+}

@@ -33,6 +33,7 @@ const DIAGNOSTIC_NOTIFICATION_CAPACITY: usize = 16;
 
 #[derive(Clone, Debug)]
 pub struct GatewayIngress {
+    topology: super::topology::GatewayTopology,
     normal_interactions: mpsc::Sender<InteractionIngress>,
     reserved_interactions: mpsc::Sender<InteractionIngress>,
     messages: mpsc::Sender<MessageIngress>,
@@ -81,6 +82,7 @@ impl GatewayIngress {
         let (diagnostic_notifications, _) = broadcast::channel(DIAGNOSTIC_NOTIFICATION_CAPACITY);
         Ok((
             Self {
+                topology: super::topology::GatewayTopology::default(),
                 normal_interactions,
                 reserved_interactions,
                 messages,
@@ -119,6 +121,11 @@ impl GatewayIngress {
 
     pub fn stop_accepting(&self) {
         self.accepting.store(false, Ordering::Release);
+    }
+
+    #[must_use]
+    pub fn topology(&self) -> super::topology::GatewayTopology {
+        self.topology.clone()
     }
 
     #[must_use]

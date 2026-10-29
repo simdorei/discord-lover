@@ -22,6 +22,8 @@ use crate::restart_readiness::drain::AdmissionGate;
 
 const NORMAL_CONCURRENCY: usize = 16;
 const RESERVED_CONCURRENCY: usize = 4;
+const PENDING_CODEX_CAPACITY: usize = 64;
+const OVERFLOW_ACK_CONCURRENCY: usize = 64;
 const INTERACTION_CLAIM_CAPACITY: usize = 4_096;
 const RESERVED_SHUTDOWN_DRAIN_TIMEOUT: Duration = Duration::from_secs(13);
 
@@ -66,6 +68,7 @@ pub(super) struct DiscordInteractionHandler {
     qa_enabled: bool,
     resources: InteractionResources,
     settings_resolver: crate::settings_binding::SettingsTargetResolver,
+    agy: Option<crate::agy::routing::AgyRouting>,
 }
 
 impl DiscordInteractionHandler {
@@ -75,15 +78,74 @@ impl DiscordInteractionHandler {
             qa_enabled: context.config.qa_commands,
             resources: context.interaction.clone(),
             settings_resolver: context.executor.settings_resolver(),
+            agy: context.agy.clone(),
         }
     }
 }
 
 trait InteractionHandler: Clone + Send + Sync + 'static {
     fn handle(&self, item: InteractionIngress) -> InteractionFuture;
+    fn reject(&self, mut item: InteractionIngress) -> InteractionFuture {
+        item.tag = InteractionIngressTag::Busy;
+        self.handle(item)
+    }
+    fn route(
+        &self,
+        item: InteractionIngress,
+        _resume: mpsc::Sender<InteractionIngress>,
+    ) -> Option<InteractionIngress> {
+        Some(item)
+    }
 }
 
 impl InteractionHandler for DiscordInteractionHandler {
+    fn reject(&self, item: InteractionIngress) -> InteractionFuture {
+        let http = Arc::clone(&self.http);
+        Box::pin(async move {
+            // Overflow may acknowledge only: no policy refresh, custody claim,
+            // database access, or command execution in this bounded lane.
+            let event = &item.event.0;
+            let response = if event.kind == twilight_model::application::interaction::InteractionType::ApplicationCommandAutocomplete {
+                cdr_discord::responses::autocomplete_response()
+            } else {
+                cdr_discord::responses::interaction_message(
+                    "Codex Discord is busy. Request not accepted; please retry shortly.", true,
+                )
+            };
+            let api = DiscordHttp::new(http, event.application_id);
+            let deadline = item.received_at + Duration::from_millis(2500);
+            if Instant::now() >= deadline {
+                return Err(crate::discord_dispatch::DiscordDispatchError::Acknowledge(
+                    "overflow acknowledgment expired; request not accepted".into(),
+                )
+                .into());
+            }
+            tokio::time::timeout_at(deadline, api.acknowledge(event.id, &event.token, &response))
+                .await
+                .map_err(|_| {
+                    crate::discord_dispatch::DiscordDispatchError::Acknowledge(
+                        "overflow acknowledgment deadline; request not accepted".into(),
+                    )
+                })?
+                .map_err(|_| {
+                    crate::discord_dispatch::DiscordDispatchError::Acknowledge(
+                        "overflow acknowledgment failed; request not accepted".into(),
+                    )
+                })?;
+            Ok(())
+        })
+    }
+    fn route(
+        &self,
+        item: InteractionIngress,
+        resume: mpsc::Sender<InteractionIngress>,
+    ) -> Option<InteractionIngress> {
+        if let Some(agy) = &self.agy {
+            agy.interaction(item, resume)
+        } else {
+            Some(item)
+        }
+    }
     fn handle(&self, item: InteractionIngress) -> InteractionFuture {
         let handler = self.clone();
         Box::pin(async move {
@@ -185,7 +247,10 @@ async fn run_lane<H: InteractionHandler>(
     handler: H,
     mut shutdown: watch::Receiver<bool>,
 ) -> Result<(), DiscordRuntimeError> {
+    let (resume, mut resolved) = mpsc::channel(32);
     let mut active = FuturesUnordered::new();
+    let mut rejections = FuturesUnordered::new();
+    let mut pending_codex = std::collections::VecDeque::<InteractionIngress>::new();
     let mut drain_deadline = None;
     let mut input_closed = false;
     loop {
@@ -195,7 +260,16 @@ async fn run_lane<H: InteractionHandler>(
             };
             drain_deadline = Some(deadline);
         }
-        if input_closed && active.is_empty() {
+        while active.len() < concurrency {
+            let Some(item) = pending_codex.pop_front() else {
+                break;
+            };
+            let interaction_id = item.event.id.get();
+            let token = item.event.token.clone();
+            let processing = handler.handle(item);
+            active.push(async move { (interaction_id, token, processing.await) });
+        }
+        if input_closed && active.is_empty() && pending_codex.is_empty() && rejections.is_empty() {
             return Ok(());
         }
         tokio::select! {
@@ -216,7 +290,15 @@ async fn run_lane<H: InteractionHandler>(
                     drain_deadline = Some(deadline);
                 }
             }
-            item = receiver.recv(), if !input_closed && active.len() < concurrency => {
+            result = active.next(), if !active.is_empty() => {
+                let (id, token, result) = result.expect("non-empty interaction future set");
+                failure::report_event_result(lane.name(), id, &token, result)?;
+            }
+            result = rejections.next(), if !rejections.is_empty() => {
+                let (id, token, result): (u64, String, Result<(), DiscordRuntimeError>) = result.expect("non-empty rejection future set");
+                failure::report_event_result(lane.name(), id, &token, result)?;
+            }
+            item = async {tokio::select! { item=receiver.recv()=>item,item=resolved.recv()=>item }}, if !input_closed => {
                 let Some(item) = item else {
                     if drain_deadline.is_none() {
                         return Err(DiscordRuntimeError::TypedIngressClosed(lane.name()));
@@ -230,14 +312,19 @@ async fn run_lane<H: InteractionHandler>(
                         tag: item.tag,
                     });
                 }
-                let interaction_id = item.event.id.get();
-                let token = item.event.token.clone();
-                let processing = handler.handle(item);
-                active.push(async move { (interaction_id, token, processing.await) });
-            }
-            result = active.next(), if !active.is_empty() => {
-                let (id, token, result) = result.expect("non-empty interaction future set");
-                failure::report_event_result(lane.name(), id, &token, result)?;
+                let Some(item)=handler.route(item,resume.clone()) else {continue;};
+                if pending_codex.len() < PENDING_CODEX_CAPACITY {
+                    pending_codex.push_back(item);
+                } else if rejections.len() < OVERFLOW_ACK_CONCURRENCY {
+                    let id=item.event.id.get();
+                    let token=item.event.token.clone();
+                    let rejection=handler.reject(item);
+                    rejections.push(async move {(id,token,rejection.await)});
+                } else {
+                    // Finite overload capacity is explicit, as at the gateway.
+                    // Do not stop routing later AGY inputs or execute this one.
+                    eprintln!("discord_interaction_hard_drop lane={} interaction={} reason=overflow_ack_capacity request_accepted=false",lane.name(),item.event.id);
+                }
             }
         }
     }
@@ -246,6 +333,95 @@ async fn run_lane<H: InteractionHandler>(
 #[cfg(test)]
 #[path = "interaction_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+pub(in crate::discord_runtime) async fn run_agy_performance_lane(
+    receiver: mpsc::Receiver<InteractionIngress>,
+    routing: Option<crate::agy::routing::AgyRouting>,
+    samples: mpsc::UnboundedSender<(u64, usize, f64)>,
+    shutdown: watch::Receiver<bool>,
+) -> Result<(), DiscordRuntimeError> {
+    run_agy_probe_lane(receiver, routing, samples, shutdown, None, false).await
+}
+
+#[cfg(test)]
+pub(crate) async fn run_agy_probe_lane(
+    receiver: mpsc::Receiver<InteractionIngress>,
+    routing: Option<crate::agy::routing::AgyRouting>,
+    samples: mpsc::UnboundedSender<(u64, usize, f64)>,
+    shutdown: watch::Receiver<bool>,
+    hold: Option<Arc<tokio::sync::Semaphore>>,
+    reserved: bool,
+) -> Result<(), DiscordRuntimeError> {
+    #[derive(Clone)]
+    struct FakeCodex {
+        routing: Option<crate::agy::routing::AgyRouting>,
+        samples: mpsc::UnboundedSender<(u64, usize, f64)>,
+        hold: Option<Arc<tokio::sync::Semaphore>>,
+    }
+    impl InteractionHandler for FakeCodex {
+        fn route(
+            &self,
+            item: InteractionIngress,
+            resume: mpsc::Sender<InteractionIngress>,
+        ) -> Option<InteractionIngress> {
+            if let Some(routing) = &self.routing {
+                routing.interaction(item, resume)
+            } else {
+                Some(item)
+            }
+        }
+        fn handle(&self, item: InteractionIngress) -> InteractionFuture {
+            let samples = self.samples.clone();
+            let hold = self.hold.clone();
+            Box::pin(async move {
+                let id = item.event.id.get();
+                let delay = item.received_at.elapsed().as_secs_f64() * 1000.0;
+                samples.send((id, 1, delay)).unwrap();
+                if let Some(hold) = hold {
+                    hold.acquire().await.unwrap().forget();
+                }
+                if id.is_multiple_of(4) {
+                    samples.send((id, 2, delay)).unwrap();
+                }
+                Ok(())
+            })
+        }
+        fn reject(&self, item: InteractionIngress) -> InteractionFuture {
+            let samples = self.samples.clone();
+            Box::pin(async move {
+                samples
+                    .send((
+                        item.event.id.get(),
+                        9,
+                        item.received_at.elapsed().as_secs_f64() * 1000.0,
+                    ))
+                    .unwrap();
+                Ok(())
+            })
+        }
+    }
+    run_lane(
+        receiver,
+        if reserved {
+            InteractionLane::Reserved
+        } else {
+            InteractionLane::Normal
+        },
+        if reserved {
+            RESERVED_CONCURRENCY
+        } else {
+            NORMAL_CONCURRENCY
+        },
+        FakeCodex {
+            routing,
+            samples,
+            hold,
+        },
+        shutdown,
+    )
+    .await
+}
 
 #[cfg(test)]
 #[path = "interaction_failure_tests.rs"]

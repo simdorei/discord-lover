@@ -153,6 +153,10 @@ pub struct MessageGapReceiver {
 }
 
 impl MessageGapReceiver {
+    #[must_use]
+    pub fn resubscribe(&self) -> Self {
+        self.tracker.subscribe()
+    }
     /// Read authoritative state before waiting; bounded notifications are only change hints.
     pub fn snapshot(&self) -> Result<Vec<MessageGapNotice>, MessageGapStateError> {
         self.tracker.snapshot()

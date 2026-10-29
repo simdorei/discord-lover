@@ -258,6 +258,13 @@ async fn mirror_deadline_total_budget_includes_lock_wait() {
 async fn mirror_deadline_deleted_room_reply_stall_keeps_fence_without_redelete() {
     let temp = tempfile::tempdir().unwrap();
     let (sync, remote) = fixture(&temp);
+    // Real OS storage preparation is outside the virtual Discord deadline clock.
+    tokio::time::resume();
+    cdr_runtime::agy::ownership::AgyOwnership::for_root(temp.path(), 1)
+        .ensure_loaded(&temp.path().join("mirror.sqlite"))
+        .await
+        .unwrap();
+    tokio::time::pause();
     let started = Arc::new(Notify::new());
     remote.0.lock().unwrap().pause_delete_after =
         Some((31, started.clone(), Arc::new(Notify::new())));

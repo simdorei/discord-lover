@@ -15,6 +15,7 @@ pub mod ingress;
 mod runtime_publication;
 mod shard;
 mod shutdown;
+pub mod topology;
 
 pub use activation::GatewayActivationError;
 pub use config::{gateway_event_flags, gateway_intents};
@@ -67,6 +68,10 @@ pub struct GatewayRuntime {
 }
 
 impl GatewayRuntime {
+    #[must_use]
+    pub fn topology(&self) -> topology::GatewayTopology {
+        self.ingress.topology()
+    }
     #[must_use]
     pub fn http(&self) -> Arc<Client> {
         Arc::clone(&self.http)

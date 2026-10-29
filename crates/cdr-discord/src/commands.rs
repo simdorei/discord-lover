@@ -52,6 +52,7 @@ const PROMPT: &[OptionSpec] = &[option("prompt", CommandOptionType::String, true
 
 const SLASH_COMMANDS: &[CommandSpec] = &[
     command("help", "Show Discord Codex commands.", &[], false),
+    command("stop", "Stop the current Codex or AGY reply.", &[], false),
     command("list", "Show recent Codex threads.", LIMIT, false),
     command(
         "archived_list",

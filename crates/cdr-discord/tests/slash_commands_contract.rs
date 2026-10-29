@@ -23,6 +23,7 @@ const PROMPT: &[ExpectedOption] = &[("prompt", CommandOptionType::String, true, 
 
 const EXPECTED: &[(&str, &str, &[ExpectedOption])] = &[
     ("help", "Show Discord Codex commands.", NONE),
+    ("stop", "Stop the current Codex or AGY reply.", NONE),
     ("list", "Show recent Codex threads.", LIMIT),
     ("archived_list", "Show archived Codex threads.", LIMIT),
     ("use", "Select the active Codex thread.", REQUIRED_REF),

@@ -18,6 +18,14 @@ pub(super) async fn recover_pending(
     context: &TypedIngressContext,
 ) -> Result<(), DiscordRuntimeError> {
     for notice in gaps.snapshot()? {
+        let notice = if let Some(agy) = &context.agy {
+            let Some(notice) = agy.gap(notice, gaps, identity.user_id.get()) else {
+                continue;
+            };
+            notice
+        } else {
+            notice
+        };
         let _admission = match context.admission.try_enter() {
             Ok(permit) => permit,
             Err(DrainGateError::Sealed) => {
@@ -47,6 +55,12 @@ pub(super) async fn recover_pending(
             policy,
             Some(identity.user_id.get()),
             observed_at,
+        )
+        .with_ownership(
+            context
+                .agy
+                .as_ref()
+                .map(crate::agy::routing::AgyRouting::ownership),
         );
         match run_history_gap_recovery(snapshot.channel_id.get(), floor, &mut io).await {
             Ok(outcome) if outcome.coverage == HistoryGapCoverage::Reached => {
@@ -78,6 +92,9 @@ pub(super) async fn recover_pending(
             Err(HistoryGapRecoveryError::Claim(error)) => {
                 log_failure(snapshot, "claim", &error);
             }
+            Err(HistoryGapRecoveryError::Process(
+                error @ crate::message_worker::MessageAdmissionError::OwnershipChanged { .. },
+            )) => log_failure(snapshot, "ownership", &error),
             Err(HistoryGapRecoveryError::Process(error)) => return Err(error.into()),
             Err(HistoryGapRecoveryError::BatchTooLarge { actual }) => {
                 return Err(DiscordRuntimeError::HistoryGapBatchTooLarge { actual });

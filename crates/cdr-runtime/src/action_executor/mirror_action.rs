@@ -41,6 +41,25 @@ impl<B: TurnBackend> ActionExecutor<B> {
             .map_err(|_| ActionError::Invalid("mirror sync is already configured".into()))
     }
 
+    pub(crate) fn configure_mirror_with_ownership(
+        &self,
+        http: Arc<twilight_http::Client>,
+        guild: Option<u64>,
+        ownership: Arc<crate::agy::ownership::AgyOwnership>,
+    ) -> Result<(), ActionError> {
+        self.mirror_sync
+            .set(
+                MirrorSynchronizer::new(
+                    self.state_db.clone(),
+                    self.mirror_db.clone(),
+                    Arc::new(DiscordMirrorTransport::new(http)),
+                    guild,
+                )
+                .with_ownership(ownership),
+            )
+            .map_err(|_| ActionError::Invalid("mirror sync is already configured".into()))
+    }
+
     pub(super) async fn bridge_sync(
         &self,
         channel: u64,

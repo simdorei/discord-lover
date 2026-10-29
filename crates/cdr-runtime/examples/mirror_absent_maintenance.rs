@@ -101,7 +101,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         paths.mirror_db,
         Arc::new(DiscordMirrorTransport::new(http)),
         config.guild_id,
-    );
+    )
+    .with_ownership(cdr_runtime::agy::ownership::AgyOwnership::for_root(
+        &paths.root,
+        config.guild_id.ok_or("guild required")?,
+    ));
     sync.retire_exact_absent(TARGET, ROOM, PARENT).await?;
     println!("exact_cleanup_completed target={TARGET} room={ROOM}");
     Ok(())

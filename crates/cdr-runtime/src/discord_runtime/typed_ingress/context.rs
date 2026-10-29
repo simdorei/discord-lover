@@ -20,6 +20,7 @@ pub(in crate::discord_runtime) struct TypedIngressContext {
     pub(in crate::discord_runtime) server: Arc<ResidentAppServer>,
     pub(super) interaction: InteractionResources,
     pub(in crate::discord_runtime) admission: AdmissionGate,
+    pub(in crate::discord_runtime) agy: Option<crate::agy::routing::AgyRouting>,
     attachment_root: PathBuf,
     attachment_client: Arc<reqwest::Client>,
 }
@@ -46,9 +47,18 @@ impl TypedIngressContext {
             server,
             interaction,
             admission,
+            agy: None,
             attachment_root,
             attachment_client,
         }
+    }
+
+    pub(in crate::discord_runtime) fn with_agy(
+        mut self,
+        agy: Option<crate::agy::routing::AgyRouting>,
+    ) -> Self {
+        self.agy = agy;
+        self
     }
 
     pub(in crate::discord_runtime) fn message_context(

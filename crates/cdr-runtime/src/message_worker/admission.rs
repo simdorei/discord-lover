@@ -14,6 +14,8 @@ use crate::restart_readiness::drain::AdmissionPermit;
 
 #[derive(Debug, Error)]
 pub enum MessageAdmissionError {
+    #[error("room {channel} ownership changed; history progress retained")]
+    OwnershipChanged { channel: u64 },
     #[error("Discord identifier does not fit the SQLite integer contract")]
     IntegerRange,
     #[error(transparent)]

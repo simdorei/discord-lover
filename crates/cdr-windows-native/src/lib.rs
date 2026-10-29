@@ -1,6 +1,9 @@
 //! Narrow, reviewed Win32 boundary for the Windows-first Rust runtime.
 
 #[cfg(windows)]
+pub mod local_control;
+
+#[cfg(windows)]
 pub mod protocol;
 #[cfg(windows)]
 pub mod resources;

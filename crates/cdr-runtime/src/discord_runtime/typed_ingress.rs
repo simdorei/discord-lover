@@ -6,10 +6,16 @@ use tokio::sync::{oneshot, watch};
 use super::DiscordRuntimeError;
 use super::worker_supervision::{MonitoredWorker, WorkerExitNotifier, spawn_monitored};
 
+#[cfg(test)]
+pub(crate) mod agy_isolation_contract;
 mod context;
 mod history;
 mod identity;
 mod interaction;
+#[cfg(test)]
+pub(super) use interaction::run_agy_performance_lane;
+#[cfg(test)]
+pub(crate) use interaction::run_agy_probe_lane;
 mod message;
 mod ready;
 mod receive_error;

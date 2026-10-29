@@ -8,7 +8,8 @@ license.workspace = true
 [dependencies]
 png = "0.18.0"
 thiserror.workspace = true
-windows-sys = { workspace = true, features = ["Win32_System_Registry", "Win32_Security_Authorization"] }
+tokio = {workspace=true,features=["net"]}
+windows-sys = { workspace = true, features = ["Win32_System_Registry", "Win32_Security_Authorization", "Win32_System_RemoteDesktop", "Win32_System_StationsAndDesktops"] }
 
 [dev-dependencies]
 tempfile.workspace = true

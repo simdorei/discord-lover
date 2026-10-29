@@ -16,6 +16,10 @@ use crate::history_poll::{
 use crate::message_worker::MessageAdmissionError;
 use crate::restart_readiness::drain::DrainGateError;
 
+#[allow(
+    clippy::too_many_lines,
+    reason = "one ordered recovery or race scenario keeps custody boundaries visible"
+)]
 pub(super) async fn run_periodic(
     state: &mut HistoryPollState,
     identity: GatewayIdentity,
@@ -40,6 +44,12 @@ pub(super) async fn run_periodic(
     state.retain_channels(&retained);
 
     for target in targets {
+        if let Some(agy) = &context.agy
+            && !agy.owner(target.channel_id).permits_codex()
+        {
+            agy.classify_later(target.channel_id);
+            continue;
+        }
         let _admission = match context.admission.try_enter() {
             Ok(permit) => permit,
             Err(DrainGateError::Sealed) => {
@@ -77,6 +87,12 @@ pub(super) async fn run_periodic(
             observed_at,
             gaps,
             gap_fence,
+        )
+        .with_ownership(
+            context
+                .agy
+                .as_ref()
+                .map(crate::agy::routing::AgyRouting::ownership),
         );
         match run_begun_history_poll_cycle(state, target.channel_id, cycle, &mut io).await {
             Ok(outcome) => eprintln!(
@@ -106,6 +122,9 @@ pub(super) async fn run_periodic(
                 "discord_history_claim_failed channel={} error={error}",
                 target.channel_id
             ),
+            Err(HistoryPollRunError::Process(
+                error @ MessageAdmissionError::OwnershipChanged { .. },
+            )) => eprintln!("discord_history_ownership_deferred: {error}"),
             Err(HistoryPollRunError::Process(error)) => return Err(error.into()),
             Err(HistoryPollRunError::State(error)) => return Err(error.into()),
             Err(HistoryPollRunError::Commit(error)) => return Err(error.into()),
