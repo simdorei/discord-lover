@@ -1,15 +1,20 @@
-# Codex Discord Remote — Rust
+# Discord Lover
 
-Discord에서 Codex 작업을 요청하고, 진행 상황과 최종 답변을 받아 보는
-**Rust 실행 버전**입니다.
+Discord에서 Codex와 선택형 AGY를 연결하는 **Rust 브릿지 개발 저장소**입니다.
+Codex+AGY 개발본 전체와 기존 Rust 저장소의 Git 이력을 이어받았습니다.
+
+AGY는 기본 비활성이며, 실제 인증 확인과 메시지 접수 경계 검증이 끝나기 전에는
+`VerificationRequired`에서 멈춥니다. 현재 개발본은 실제 AGY 작업이나 카테고리
+생성을 시작하지 않습니다. 로컬 구현과 Pro R3 검수는 완료됐지만 실제 서비스
+통합 검증은 남아 있습니다. [이전 및 검증 범위](docs/discord-lover-import.md)를 확인하세요.
 
 설치·보조 도구도 Rust를 사용하며 Python 설치는 필요하지 않습니다.
 기존에 실행 중인 봇에 자동 반영되는 것은 아닙니다.
 [전환 범위와 개발 당시 검증 기록](docs/python-free-migration.md)을 확인하세요.
 
-기존 [codex-discord-remote](https://github.com/simdorei/codex-discord-remote)에서
-현재 Rust 구현을 분리했습니다. 과거 Git 변경 이력, 실제 대화 기록,
-사용자 설정, 데이터베이스 및 실행 파일은 포함하지 않습니다.
+기반 저장소는 [codex-discord-remote-rust](https://github.com/simdorei/codex-discord-remote-rust)입니다.
+해당 Rust 저장소의 이력을 보존했으며 실제 대화 기록, 사용자 설정,
+데이터베이스 및 실행 파일은 포함하지 않습니다.
 
 ## 포함된 기능
 
@@ -50,8 +55,8 @@ Python 설치 파일·소스·전용 복구 경로는 제거했습니다. 오류
 - 직접 만든 Discord 봇과 본인 서버의 관리 권한
 
 ```powershell
-git clone https://github.com/simdorei/codex-discord-remote-rust.git
-cd codex-discord-remote-rust
+git clone https://github.com/simdorei/discord-lover.git
+cd discord-lover
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-discord-bot.ps1
 ```
