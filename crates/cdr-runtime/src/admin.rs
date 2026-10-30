@@ -14,6 +14,7 @@ mod recovery_capability;
 pub mod setup;
 mod store;
 pub mod threads;
+mod upgrade;
 mod writer_recovery;
 
 use args::Args;
@@ -35,6 +36,7 @@ pub async fn run(arguments: impl IntoIterator<Item = OsString>) -> Result<String
         "inspect-new-first-reply" => first_reply::run(&args, &root),
         "inspect-async-recovery" => async_recovery::run(&args, &root),
         "check-recovery-compatibility" => recovery_capability::run(&args, &root),
+        "inspect-upgrade" | "backup-upgrade" => upgrade::run(&args, &root),
         unknown => Err(format!("unknown admin command: {unknown}")),
     }
 }

@@ -83,7 +83,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\setup-discord-bot.ps1
 기존 봇이 있는 PC에서는 설정 도구를 중복 실행하지 마세요.
 같은 Discord 봇 토큰으로 두 실행본을 동시에 켜지 마세요.
 이미 설치된 실행 파일과 다른 버전이면 설치 도구가 덮어쓰기를 거부합니다.
-업데이트는 별도 폴더에서 빌드한 뒤 검증된 배포 절차로 진행하세요.
+기존 Codex 전용 Rust 설치를 교체하려면 **별도 Discord Lover 폴더**에서 실행하세요.
+기존 폴더의 `.env`, DB, 첨부파일, 봇 연결 정보와 자동시작 등록은 유지합니다.
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\update.ps1 -TargetRoot "C:\기존\브릿지폴더"
+```
+
+새 실행 파일을 빌드한 뒤 작업 완료 대기 → 정상 종료 → 백업 → 교체 → 재시작을
+진행합니다. 기본 대기 시간은 15분이며 강제로 작업을 끊지 않습니다. AGY는 꺼진
+상태로 유지합니다. [교체 설치·검증·실패 복구](docs/windows-safe-upgrade.md)를 확인하세요.
 
 설치 전에 변경 없이 확인하려면:
 

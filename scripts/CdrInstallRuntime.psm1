@@ -17,7 +17,7 @@ function Install-CdrRuntimeArtifact {
     $expected = Get-CdrInstallArtifactHash $Source
     if ([IO.File]::Exists($destination)) {
         if ((Get-CdrInstallArtifactHash $destination) -cne $expected) {
-            throw 'Existing runtime differs; use verified deployment to replace it. The installed bot was not stopped or changed.'
+            throw 'Existing runtime differs; use update.ps1 -TargetRoot <existing Rust folder> from a separate Discord Lover checkout for verified deployment. The installed bot was not stopped or changed.'
         }
         return
     }

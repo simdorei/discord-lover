@@ -14,7 +14,10 @@ pub(super) fn run(args: &Args, root: &Path) -> Result<String, String> {
         .map_err(|error| format!("RECOVERY_COMPATIBILITY_HOLD: {error}"))
 }
 
-fn inspect(path: &Path, environment: Option<&Path>) -> Result<String, Box<dyn std::error::Error>> {
+pub(super) fn inspect(
+    path: &Path,
+    environment: Option<&Path>,
+) -> Result<String, Box<dyn std::error::Error>> {
     // Missing files, unsupported schemas and unreadable requirements are not
     // interpreted as a fresh installation. No open_initialized/migration here.
     let db = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;

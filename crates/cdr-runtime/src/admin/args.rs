@@ -29,7 +29,11 @@ impl Args {
                 "--plugin-id",
             ],
             "discover-codex" => &["--codex-exe"],
-            "backup-store" | "active-queue-count" | "retire-automatic-reserve" => &[],
+            "backup-store"
+            | "active-queue-count"
+            | "retire-automatic-reserve"
+            | "inspect-upgrade"
+            | "backup-upgrade" => &[],
             "authorize-saved-final" => &["--request-file"],
             "list-threads" => &["--limit"],
             "archive-thread" => &["--thread-id"],

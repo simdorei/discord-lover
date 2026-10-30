@@ -3,6 +3,7 @@ param(
     [string]$RepoRoot = $PSScriptRoot,
     [string]$BinaryPath,
     [string]$EnvPath,
+    [switch]$LibraryOnly,
     [switch]$DryRun,
     [switch]$LogHealthy,
     [switch]$CheckRestartReady,
@@ -50,17 +51,18 @@ try {
     $watchdogProcess.Dispose()
 }
 $RestartClaimPath = Join-Path $RepoRoot ".codex_discord_rust.restart.claimed.$PID.$watchdogTicks"
-$DrainSupportPath = Join-Path $RepoRoot 'codex-discord-rust-drain.ps1'
+$SupportRoot = if ($LibraryOnly) { $PSScriptRoot } else { $RepoRoot }
+$DrainSupportPath = Join-Path $SupportRoot 'codex-discord-rust-drain.ps1'
 if (-not (Test-Path -LiteralPath $DrainSupportPath -PathType Leaf)) {
     throw "Rust restart drain support was not found: $DrainSupportPath"
 }
 . $DrainSupportPath
-. (Join-Path $RepoRoot 'codex-discord-rust-control.ps1')
-. (Join-Path $RepoRoot 'scripts/CdrDeploymentRecovery.ps1')
-. (Join-Path $RepoRoot 'scripts/CdrLaunchJournal.ps1')
-. (Join-Path $RepoRoot 'scripts/CdrRestartTransaction.ps1')
-. (Join-Path $RepoRoot 'scripts/CdrForceRestart.ps1')
-. (Join-Path $RepoRoot 'scripts/CdrMaintenanceCompatibility.ps1')
+. (Join-Path $SupportRoot 'codex-discord-rust-control.ps1')
+. (Join-Path $SupportRoot 'scripts/CdrDeploymentRecovery.ps1')
+. (Join-Path $SupportRoot 'scripts/CdrLaunchJournal.ps1')
+. (Join-Path $SupportRoot 'scripts/CdrRestartTransaction.ps1')
+. (Join-Path $SupportRoot 'scripts/CdrForceRestart.ps1')
+. (Join-Path $SupportRoot 'scripts/CdrMaintenanceCompatibility.ps1')
 
 if (
     $HealthCpuPercent -ne 95 -or
@@ -361,6 +363,7 @@ if (-not (Test-Path -LiteralPath $BinaryPath -PathType Leaf)) {
     throw "Rust runtime binary was not found: $BinaryPath"
 }
 
+if ($LibraryOnly) { return }
 # CONTROL_ENTRY: tests execute this boundary with fixture process providers.
 $script:CdrTrayStartedIdentity = ''
 $script:CdrTrayPollAllowed = $false
