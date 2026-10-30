@@ -77,6 +77,13 @@ function Invoke-CdrUpgradeEngine($State) {
         Assert-CdrUpgradeStable $State
         Assert-CdrUpgradeMarkers $State
         if ($null -ne $State.Command) { throw 'upgrade_helper_outcome_unknown; no helper replay' }
+        # Resuming in another shell can change effective settings without
+        # changing .env. Check before drain, stop, backup, install or rollback.
+        # An already attempted launch is only adopted below, never re-probed
+        # or replayed; a still-prepared launch is checked immediately before it.
+        if ($State.Phase -notin @('launching','healthy','completed')) {
+            Assert-CdrUpgradeExecutionBinding $State
+        }
         while ($true) {
             Assert-CdrUpgradeStable $State; Assert-CdrUpgradeMarkers $State
             switch ($State.Phase) {
@@ -132,6 +139,7 @@ function Invoke-CdrUpgradeEngine($State) {
                 }
                 'launch_ready' {
                     Assert-CdrUpgradeInstalled $State
+                    Assert-CdrUpgradeExecutionBinding $State
                     $exclusive=Enter-CdrUpgradeExclusive
                     try { Clear-CdrUpgradeDrain $State }
                     finally { $exclusive.Dispose() }
@@ -146,6 +154,7 @@ function Invoke-CdrUpgradeEngine($State) {
                     $journal=Read-CdrLaunchJournal $journalPath
                     if ($journal -and $journal.Phase -eq 'prepared') {
                         Assert-CdrUpgradeNoRuntime; Assert-CdrUpgradeInstalled $State
+                        Assert-CdrUpgradeExecutionBinding $State
                         $script:CdrLaunchJournalPath=$journalPath
                         try { Start-RustRuntime }
                         finally { $script:CdrLaunchJournalPath=$null }
@@ -164,6 +173,11 @@ function Invoke-CdrUpgradeEngine($State) {
         if ($State.Phase -in @('stopped','installing','installed') -and $null -eq $State.Command) {
             try {
                 Assert-CdrUpgradeNoRuntime
+                # A binding failure must not turn into a previous-program
+                # launch under the same changed environment. Leave this phase
+                # and all files intact until the original binding is restored.
+                Assert-CdrUpgradeStable $State
+                Assert-CdrUpgradeExecutionBinding $State
                 Set-CdrUpgradePhase $State 'rolling_back'
                 Invoke-CdrUpgradeEngine $State
             } catch { throw ('upgrade_failed: '+$State.LastError+'; recovery_held: '+(Get-CdrMaintenanceDiagnostic $_.Exception.Message $EnvPath)) }

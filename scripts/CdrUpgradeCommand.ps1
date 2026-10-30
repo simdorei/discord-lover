@@ -59,6 +59,12 @@ function Read-CdrUpgradeBinding($State,[string]$Executable,[switch]$Backup) {
     }
     return $proof
 }
+function Assert-CdrUpgradeExecutionBinding($State) {
+    # The previous runtime may not implement inspect-upgrade. Always use the
+    # hash-pinned staged candidate, including before a previous-program launch.
+    $entry=@($State.Files|Where-Object {$_.Path -eq 'target/release/cdr-runtime.exe'})[0]
+    $null=Read-CdrUpgradeBinding $State (Get-CdrUpgradeFile $State $entry 'candidate')
+}
 function New-CdrUpgradeSnapshot($State,[string]$Name) {
     $entry=@($State.Files|Where-Object {$_.Path -eq 'target/release/cdr-runtime.exe'})[0]
     $proof=Read-CdrUpgradeBinding $State (Get-CdrUpgradeFile $State $entry 'candidate') -Backup

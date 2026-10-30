@@ -76,8 +76,13 @@ function Remove-CdrUpgradeStaging($State) {
 }
 function Assert-CdrUpgradeNoRuntime {
     foreach ($process in @(Get-Process -Name cdr-runtime -ErrorAction SilentlyContinue)) {
-        try { $path=$process.Path } catch { throw 'upgrade_process_identity_unreadable' }
-        if (-not $path) { throw 'upgrade_process_identity_unreadable' }
+        try { $path=$process.Path } catch { $path=$null }
+        if (-not $path) {
+            # Another installation's short-lived inspector may exit after the
+            # process list snapshot. Only a proven exit may be ignored.
+            if ($process.HasExited) { continue }
+            throw 'upgrade_process_identity_unreadable'
+        }
         if ([StringComparer]::OrdinalIgnoreCase.Equals($path,$BinaryPath)) { throw 'upgrade_runtime_still_running' }
     }
     $lockPid=Get-RuntimePid

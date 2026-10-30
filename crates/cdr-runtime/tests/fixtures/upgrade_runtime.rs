@@ -1,6 +1,7 @@
 //! Isolated OS-process fixture. Never included in the product runtime.
 use std::{
     fs,
+    io::Write,
     path::Path,
     process::{Command, ExitCode},
     thread,
@@ -37,6 +38,16 @@ fn main() -> ExitCode {
         println!("restart_readiness_ok");
         return ExitCode::SUCCESS;
     }
+    writeln!(
+        fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open("fixture-starts.log")
+            .unwrap(),
+        "{}",
+        std::process::id()
+    )
+    .unwrap();
     if Path::new("fail-start").exists() {
         return ExitCode::FAILURE;
     }

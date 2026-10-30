@@ -143,9 +143,12 @@ impl Install {
         }
     }
     pub fn command(&self) -> Command {
+        self.command_from(&repo())
+    }
+    pub fn command_from(&self, source: &Path) -> Command {
         let mut cmd = Command::new("powershell.exe");
         cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
-            .arg(repo().join("update.ps1"))
+            .arg(source.join("update.ps1"))
             .arg("-TargetRoot")
             .arg(&self.root)
             .arg("-CandidatePath")
