@@ -85,6 +85,7 @@ pub(super) fn stage(
         }),
         target_thread_id: abandonment_target(database, request)?
             .or(publication_target(database, request)?)
+            .or(super::async_modal::answer_target(database, request)?)
             .or_else(|| {
                 settings
                     .binding

@@ -102,7 +102,7 @@ async fn new_event_for_ready_busy_owner_is_acked_for_confirmation_only() {
 }
 
 #[tokio::test]
-async fn new_event_for_unowned_saved_choice_gets_truthful_manual_review_ack() {
+async fn new_event_for_unowned_saved_choice_is_quiet_and_keeps_one_manual_review_notice() {
     let database = DispatchDatabase::new();
     let choice_id = create_choice(database.path());
     let transport = Arc::new(InspectingTransport::new(database.path()));
@@ -131,6 +131,14 @@ async fn new_event_for_unowned_saved_choice_gets_truthful_manual_review_ack() {
         .unwrap()
         .unwrap();
     assert_eq!(parent.state, "held");
+    let notices_before = cdr_store::delivery::list_pending(database.path()).unwrap();
+    assert_eq!(notices_before.len(), 1);
+    assert!(
+        notices_before[0]
+            .content
+            .contains("Saved Discord request requires review")
+    );
+    assert!(notices_before[0].content.contains(&parent.ingress_id));
 
     transport.set_fail_ack(false);
     assert_eq!(
@@ -152,12 +160,16 @@ async fn new_event_for_unowned_saved_choice_gets_truthful_manual_review_ack() {
     assert_eq!(repeat.owner_kind.as_deref(), Some("ingress"));
     assert_eq!(repeat.owner_id.as_deref(), Some("interaction:953"));
     let responses = transport.responses.lock().unwrap();
-    let content = responses[1]
-        .data
-        .as_ref()
-        .and_then(|data| data.content.as_deref())
-        .unwrap()
-        .to_ascii_lowercase();
-    assert!(content.contains("saved") && content.contains("review"));
-    assert!(!content.contains("queued") && !content.contains("completed"));
+    assert_eq!(responses.len(), 2);
+    assert_eq!(
+        responses[1].kind,
+        twilight_model::http::interaction::InteractionResponseType::DeferredUpdateMessage
+    );
+    assert!(responses[1].data.is_none());
+    let notices_after = cdr_store::delivery::list_pending(database.path()).unwrap();
+    assert_eq!(notices_after.len(), 1);
+    assert_eq!(notices_after[0].delivery_id, notices_before[0].delivery_id);
+    assert_eq!(notices_after[0].content, notices_before[0].content);
+    assert!(list_prompt_intakes(database.path()).unwrap().is_empty());
+    assert!(cdr_store::queue::list(database.path()).unwrap().is_empty());
 }

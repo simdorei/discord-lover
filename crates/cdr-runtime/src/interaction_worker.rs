@@ -17,6 +17,7 @@ use crate::discord_dispatch::delivery_identity::INTERACTION_FOLLOWUP_DOMAIN;
 use crate::queue_runner::TurnBackend;
 
 mod action_delivery;
+mod async_answer_refusal;
 #[cfg(test)]
 mod busy_ingress_tests;
 mod cleanup_refusal;
@@ -39,6 +40,8 @@ use error_report::report_interaction_error;
 
 #[derive(Debug, Error)]
 pub enum InteractionWorkerError {
+    #[error("answer was not sent; notification remains unconfirmed: {0}")]
+    AsyncAnswerNotice(String),
     #[error(transparent)]
     KnownOutcomeNotification(#[from] crate::cleanup_refusal::NotificationFailure),
     #[error(transparent)]
@@ -124,6 +127,9 @@ async fn process_interaction_work<B: TurnBackend>(
             let confirmation = match handle_component_work(work, component, executor, server).await
             {
                 Ok(confirmation) => confirmation,
+                Err(ComponentWorkerError::AsyncAnswerNotDispatched(refusal)) => {
+                    return async_answer_refusal::deliver(work, custody, &http, &refusal).await;
+                }
                 Err(
                     error @ ComponentWorkerError::Busy(
                         crate::component_worker::BusyComponentError::ControlNotDispatched(_),

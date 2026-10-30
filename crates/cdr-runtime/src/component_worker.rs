@@ -79,6 +79,8 @@ impl PreparedComponentConfirmation {
 
 #[derive(Debug, Error)]
 pub enum ComponentWorkerError {
+    #[error(transparent)]
+    AsyncAnswerNotDispatched(cdr_store::ingress::AsyncAnswerRefusal),
     #[error("saved-request disposition held: {0}")]
     Abandonment(String),
     #[error(
@@ -161,7 +163,23 @@ pub async fn handle_component_work<B: TurnBackend>(
         option,
     } = component
     {
-        async_choice::handle(work, question_id, *option, executor, server).await?
+        async_choice::handle(
+            work,
+            question_id,
+            cdr_store::async_question::Answer::Choice(*option),
+            executor,
+            server,
+        )
+        .await?
+    } else if let ComponentId::AsyncTextAnswer { question_id, text } = component {
+        async_choice::handle(
+            work,
+            question_id,
+            cdr_store::async_question::Answer::Text(text.clone()),
+            executor,
+            server,
+        )
+        .await?
     } else if work.processing_mode == InteractionProcessingMode::ConfirmationOnly {
         busy::prepare_confirmation_only(work, component, executor.mirror_db())?
     } else {

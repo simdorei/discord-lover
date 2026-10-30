@@ -154,6 +154,7 @@ impl<B: TurnBackend> ActionExecutor<B> {
     ) -> Result<ActionResult, ActionError> {
         let _control = self.control_lock(thread_id).await?;
         let (bound_turn, preceding_job) = self.queue.control_binding(thread_id).await?;
+        let unconfirmed_turn = bound_turn.is_none();
         let pro = cdr_pro::prompt::is_pro_command(prompt);
         let (allow_steer, control_status) = if pro {
             (false, Some("Pro requests require connection checks and cannot be steered; choose Queue next to submit this request through Pro validation.".into()))
@@ -195,16 +196,23 @@ impl<B: TurnBackend> ActionExecutor<B> {
             bound_turn.as_deref(),
             preceding_job.as_deref(),
         )?;
-        let mut text =
-            format!("Codex is busy for {thread_id}. Choose what to do with this request.");
-        if let Some(status) = control_status {
+        let mut text = if unconfirmed_turn {
+            format!(
+                "Codex has no confirmed active turn for {thread_id}. Choose Queue next to save this request, or Ignore to dismiss it. Steer/Stop needs a confirmed running task."
+            )
+        } else {
+            format!("Codex is busy for {thread_id}. Choose what to do with this request.")
+        };
+        if let Some(status) = control_status.filter(|_| !unconfirmed_turn) {
             text.push_str("\nControl status: ");
             text.push_str(&status);
         }
         Ok(ActionResult {
             text,
             waits_for_final: false,
-            ui: Some(if pro {
+            ui: Some(if unconfirmed_turn {
+                ActionUi::PendingBusy { choice_id }
+            } else if pro {
                 ActionUi::ProBusy { choice_id }
             } else {
                 ActionUi::Busy {

@@ -92,8 +92,7 @@ pub(super) fn original_question(row: &Obligation) -> Result<Question> {
     let chosen = claim
         .get("chosen")
         .and_then(Value::as_u64)
-        .and_then(|n| usize::try_from(n).ok())
-        .ok_or_else(invalid)?;
+        .and_then(|n| usize::try_from(n).ok());
     let q = Question {
         id: string("id")?,
         runtime_id: string("runtime_id")?,
@@ -107,14 +106,20 @@ pub(super) fn original_question(row: &Obligation) -> Result<Question> {
         body,
         state: "dispatching".into(),
         message_id: Some(string("message_id")?),
-        chosen: Some(chosen),
+        chosen,
+        chosen_text: claim
+            .get("answer_text")
+            .and_then(Value::as_str)
+            .map(str::to_owned),
         reply_job_id: None,
         error: row.original_error.clone(),
     };
     let job = &seal["identity"]["job"];
-    let identity = json!({"question":[&q.runtime_id,&q.thread_id,&q.turn_id,&q.item_id,&q.origin_job_id],
+    let mut identity = json!({"question":[&q.runtime_id,&q.thread_id,&q.turn_id,&q.item_id,&q.origin_job_id],
         "generation":q.generation,"channel":q.channel_id,"actor":q.owner_user_id,
         "message":q.message_id,"chosen":q.chosen,"body":q.body,"reply_job_id":null,"job":job});
+    crate::async_question::bind_text(&mut identity, &q);
+    let answer = crate::async_question::chosen_answer(&q).map_err(|_| invalid())?;
     if q.id != row.question_id
         || q.thread_id != row.thread_id
         || q.turn_id != row.turn_id
@@ -129,7 +134,7 @@ pub(super) fn original_question(row: &Obligation) -> Result<Question> {
         || job["channel_id"] != q.channel_id
         || job["owner_user_id"] != q.owner_user_id
         || job["turn_id"] != q.turn_id
-        || crate::async_question::answer_prompt(&q, chosen)?.len() > 65_536
+        || crate::async_question::answer_prompt_with(&q, &answer)?.len() > 65_536
     {
         return Err(invalid());
     }
@@ -166,11 +171,8 @@ fn exact_input(turn: &Value, q: &Question) -> Result<(Option<Value>, bool)> {
             return Err(held(&q.thread_id, "historical item identity is duplicated"));
         }
     }
-    let prompt = crate::async_question::answer_prompt(
-        q,
-        q.chosen
-            .ok_or_else(|| held(&q.thread_id, "missing sealed selection"))?,
-    )?;
+    let prompt =
+        crate::async_question::answer_prompt_with(q, &crate::async_question::chosen_answer(q)?)?;
     let mut matched = None;
     let mut conflict = false;
     for item in items {

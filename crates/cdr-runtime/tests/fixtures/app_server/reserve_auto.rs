@@ -72,7 +72,7 @@ impl Fixture {
                 let rows = self.turns.get(&target).cloned().unwrap_or_default();
                 reply(
                     request,
-                    &json!({"data":rows.into_iter().rev().take(1).collect::<Vec<_>>(),"nextCursor":null}),
+                    &json!({"data":rows.into_iter().rev().take(usize::try_from(request["params"]["limit"].as_u64().unwrap_or(1)).unwrap()).collect::<Vec<_>>(),"nextCursor":null}),
                 )
             }
             "turn/steer" => {

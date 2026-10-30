@@ -79,18 +79,9 @@ fn hold_in(
         )?;
         return Ok(());
     }
-    if let Some(refusal) = super::CleanupRefusal::from_outcome(record.outcome.as_ref()) {
+    if let Some(detail) = known_refusal_detail(&record, reason) {
         // The action's refusal is known; only its notification can be uncertain.
         // Never send a different-key Saved POST or fabricate delivery evidence.
-        let detail = if record.hold_reason.starts_with("Mirror sync stopped:") {
-            record.hold_reason
-        } else {
-            format!(
-                "{} Recovery boundary: {}",
-                refusal.pending_summary(),
-                reason.chars().take(150).collect::<String>()
-            )
-        };
         connection.execute(
             "UPDATE discord_ingress_journal SET state='held',hold_reason=?,updated_at=? WHERE ingress_id=?",
             params![detail, now, key],
@@ -163,4 +154,20 @@ fn hold_in(
         [key],
     )?;
     Ok(())
+}
+
+fn known_refusal_detail(record: &super::StoredIngress, reason: &str) -> Option<String> {
+    if let Some(refusal) = super::CleanupRefusal::from_outcome(record.outcome.as_ref()) {
+        return Some(if record.hold_reason.starts_with("Mirror sync stopped:") {
+            record.hold_reason.clone()
+        } else {
+            format!(
+                "{} Recovery boundary: {}",
+                refusal.pending_summary(),
+                reason.chars().take(150).collect::<String>()
+            )
+        });
+    }
+    super::AsyncAnswerRefusal::from_outcome(record.outcome.as_ref())
+        .map(|refusal| format!("{refusal} Notification remains unconfirmed: {reason}"))
 }

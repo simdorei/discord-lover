@@ -2,10 +2,13 @@ use crate::Result;
 use rusqlite::Connection;
 
 pub(super) fn claim_json(q: &str) -> String {
-    format!("json_object('id',{q}.id,'runtime_id',{q}.runtime_id,'generation',{q}.generation,
+    let choice = format!("json_object('id',{q}.id,'runtime_id',{q}.runtime_id,'generation',{q}.generation,
         'thread_id',{q}.thread_id,'turn_id',{q}.turn_id,'item_id',{q}.item_id,
         'origin_job_id',{q}.origin_job_id,'channel_id',{q}.channel_id,'owner_user_id',{q}.owner_user_id,
-        'body',{q}.body,'chosen',{q}.chosen,'message_id',{q}.message_id,'dispatch_mode',{q}.dispatch_mode)")
+        'body',{q}.body,'chosen',{q}.chosen,'message_id',{q}.message_id,'dispatch_mode',{q}.dispatch_mode)");
+    format!(
+        "CASE WHEN {q}.answer_text IS NULL THEN {choice} ELSE json_set({choice},'$.answer_text',{q}.answer_text) END"
+    )
 }
 
 pub(super) fn owner_json(j: &str) -> String {
@@ -133,6 +136,9 @@ pub(crate) fn schema_current(db: &Connection) -> Result<bool> {
          'cdr_async_recovery_policy_no_delete','cdr_async_recovery_policy_capability')", [], |r| r.get(0),
     )?;
     if !present {
+        return Ok(false);
+    }
+    if !db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='trigger' AND name='cdr_async_obligation_question' AND instr(sql,'answer_text')>0)", [], |r|r.get::<_,bool>(0))? {
         return Ok(false);
     }
     Ok(db.query_row(

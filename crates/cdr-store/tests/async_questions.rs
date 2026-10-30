@@ -65,7 +65,7 @@ fn claim(id: &str, mode: aq::DispatchMode) -> aq::Claim<'_> {
         channel: 20,
         actor: 30,
         message: "1234",
-        option: 1,
+        answer: aq::Answer::Choice(1),
         mode,
         baseline_turn_ids: if mode == aq::DispatchMode::Start {
             vec!["older-ui-turn".into(), "original".into()]
@@ -83,7 +83,7 @@ fn competing_buttons_are_one_durable_claim_without_ttl_reopening() {
     let first = aq::begin_dispatch(&db, &claim(&id, aq::DispatchMode::Steer)).unwrap();
     assert_eq!(first.chosen, Some(1));
     let mut competing = claim(&id, aq::DispatchMode::Steer);
-    competing.option = 0;
+    competing.answer = aq::Answer::Choice(0);
     competing.now = 9_999_999.0;
     assert!(aq::begin_dispatch(&db, &competing).is_err());
     assert_eq!(aq::get(&db, &id).unwrap().chosen, Some(1));
@@ -121,7 +121,7 @@ fn forged_or_wrong_authority_never_claims_and_changed_mapping_rejects() {
             0 => c.actor = 31,
             1 => c.channel = 21,
             2 => c.message = "999",
-            3 => c.option = 10,
+            3 => c.answer = aq::Answer::Choice(10),
             4 => c.runtime_id = "resident-b",
             _ => c.generation = 2,
         }
@@ -223,6 +223,9 @@ fn early_successor_question_waits_for_exact_reply_acceptance() {
 
 #[path = "support/integrated_async_store.rs"]
 mod integrated;
+
+#[path = "support/async_text_answer.rs"]
+mod text_answer;
 
 #[test]
 fn async_start_requires_baseline_and_seals_it_before_dispatch() {

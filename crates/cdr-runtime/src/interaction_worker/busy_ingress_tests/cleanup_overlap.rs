@@ -53,7 +53,7 @@ pub(super) async fn create_while_claimed(
         .unwrap();
     assert!(matches!(
         result.ui,
-        Some(crate::action_executor::ActionUi::Busy { .. })
+        Some(crate::action_executor::ActionUi::PendingBusy { .. })
     ));
     let retained: bool = cdr_store::schema::open_initialized(db).unwrap().query_row(
         "SELECT EXISTS(SELECT 1 FROM codex_busy_control_bindings b JOIN busy_choices c USING(choice_id)

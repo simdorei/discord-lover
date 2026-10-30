@@ -6,17 +6,15 @@ use crate::{
 };
 use cdr_app_server::{
     AppServerError, ResidentAppServer,
-    outcomes::{TurnStatus, parse_thread_turn_states},
-    requests::{AppRequest, read_thread_with_timeout, start_turn, steer_turn},
+    requests::{start_turn, steer_turn},
 };
-use cdr_store::async_question::{self as store, DispatchMode, Question};
-use serde_json::json;
-use std::time::Duration;
+use cdr_store::async_question::{self as store, Answer, DispatchMode, Question};
+mod preparation;
 
 pub(super) async fn handle<B: TurnBackend>(
     work: &InboundInteractionWork,
     id: &str,
-    option: usize,
+    answer: Answer,
     executor: &ActionExecutor<B>,
     server: &ResidentAppServer,
 ) -> Result<ConfirmationPlan, ComponentWorkerError> {
@@ -34,7 +32,7 @@ pub(super) async fn handle<B: TurnBackend>(
     if u64::try_from(q.channel_id).ok() != Some(work.channel_id.get())
         || u64::try_from(q.owner_user_id).ok() != Some(work.user_id.get())
         || q.message_id.as_deref() != Some(&message)
-        || option >= q.body.options.len()
+        || answer.validate(&q).is_err()
     {
         return Err(invalid(
             "질문의 사용자·방·메시지·선택지가 일치하지 않아 답변하지 않았습니다.",
@@ -42,7 +40,7 @@ pub(super) async fn handle<B: TurnBackend>(
     }
     store::require_current_mapping(db, &q)?;
     if q.state == "submitted" {
-        if q.chosen != Some(option) {
+        if store::chosen_answer(&q)? != answer {
             return Err(ComponentWorkerError::AlreadyHandled);
         }
         return Ok(confirmation(&q)); // Display recovery only, never another RPC.
@@ -56,42 +54,16 @@ pub(super) async fn handle<B: TurnBackend>(
             q.state, q.error
         )));
     }
-    let prepared = preflight(server, &q).await?;
-    let mode = prepared.0;
-    let prompt = answer_prompt(&q, option)?;
-    store::begin_dispatch(
-        db,
-        &store::Claim {
-            id,
-            runtime_id: server.instance_id(),
-            generation: q.generation,
-            channel: q.channel_id,
-            actor: q.owner_user_id,
-            message: &message,
-            option,
-            mode,
-            baseline_turn_ids: prepared.1.clone(),
-            prompt: &prompt,
-            now: super::now()?,
-        },
-    )?;
-    // Actual-send boundary: original turn, no successor, connection and mapping
-    // are checked again while the same target lock is held. No deferred starts.
-    let checked = async {
-        store::require_current_mapping(db, &q)?;
-        if preflight(server, &q).await? != prepared {
-            return Err(invalid(
-                "질문의 원래 작업 상태가 변경되어 답변하지 않았습니다.",
-            ));
-        }
-        store::validate_dispatch_guards(db, &q.thread_id)?;
-        Ok::<_, ComponentWorkerError>(())
-    }
-    .await;
-    if let Err(error) = checked {
-        store::reject_definite(db, id, &error.to_string())?;
-        return Err(error);
-    }
+    let prompt = store::answer_prompt_with(&q, &answer)?;
+    let mode = preparation::prepare(db, server, &q, answer, &message, &prompt)
+        .await
+        .map_err(|error| {
+            ComponentWorkerError::AsyncAnswerNotDispatched(cdr_store::ingress::AsyncAnswerRefusal {
+                thread_id: q.thread_id.clone(),
+                question_id: q.id.clone(),
+                reason: error.to_string(),
+            })
+        })?;
     dispatch_claimed(db, server, &q, mode, &prompt).await?;
     executor.notify_delivery_ready();
     Ok(confirmation(&q))
@@ -152,106 +124,6 @@ async fn dispatch_claimed(
     };
     store::confirm_dispatch(db, id, accepted)?;
     Ok(())
-}
-
-async fn preflight(
-    server: &ResidentAppServer,
-    q: &Question,
-) -> Result<(DispatchMode, Vec<String>), ComponentWorkerError> {
-    let snapshot = server.lifecycle_snapshot().await;
-    if !snapshot.healthy
-        || snapshot.quarantined
-        || snapshot.restart_pending
-        || server.instance_id() != q.runtime_id
-        || i64::try_from(snapshot.generation).ok() != Some(q.generation)
-    {
-        return Err(invalid(
-            "질문을 만든 기존 연결이 변경되었거나 준비되지 않았습니다. 답변하지 않았습니다.",
-        ));
-    }
-    if let Some(active) = server.active_turn_id(&q.thread_id).await? {
-        return if active == q.turn_id {
-            Ok((DispatchMode::Steer, Vec::new()))
-        } else {
-            Err(invalid(
-                "새 작업이 이미 시작되어 이전 질문의 버튼은 만료되었습니다.",
-            ))
-        };
-    }
-    let result = server
-        .execute(
-            AppRequest {
-                method: "thread/turns/list",
-                params: json!({
-                    "threadId":q.thread_id,"limit":1,"sortDirection":"desc","itemsView":"full"
-                }),
-                timeout: Duration::from_secs(8),
-            },
-            Some(snapshot.generation),
-        )
-        .await?;
-    let turns = result
-        .get("data")
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| invalid("최신 작업 기록을 확인할 수 없어 답변하지 않았습니다."))?;
-    if turns.len() != 1 || turns[0]["id"] != q.turn_id || turns[0]["status"] != "completed" {
-        return Err(invalid(
-            "질문의 원래 작업이 마지막 완료 작업인지 확인되지 않았습니다. 이전 질문을 새 작업에 전달하지 않습니다.",
-        ));
-    }
-    let goal = server
-        .execute(
-            cdr_app_server::requests::get_goal(&q.thread_id),
-            Some(snapshot.generation),
-        )
-        .await?;
-    if cdr_app_server::goal::parse_thread_goal_status(&goal, &q.thread_id)
-        .map_err(|e| invalid(&e.to_string()))?
-        == Some(cdr_app_server::goal::ThreadGoalStatus::Active)
-    {
-        return Err(invalid(
-            "목표 작업이 계속 실행 중입니다. 원래 작업이 활성 상태일 때 답하거나 새 메시지로 요청해 주세요.",
-        ));
-    }
-    Ok((
-        DispatchMode::Start,
-        start_baseline(server, q, snapshot.generation).await?,
-    ))
-}
-
-async fn start_baseline(
-    server: &ResidentAppServer,
-    q: &Question,
-    generation: u64,
-) -> Result<Vec<String>, ComponentWorkerError> {
-    // A one-shot answer bypasses the ordinary queue start, but must retain the
-    // same pre-start history boundary. Old UI turns are not Goal successors.
-    let result = server
-        .execute(
-            read_thread_with_timeout(&q.thread_id, true, Duration::from_secs(8)),
-            Some(generation),
-        )
-        .await?;
-    let states = parse_thread_turn_states(&result, &q.thread_id)
-        .map_err(|error| invalid(&error.to_string()))?;
-    if result["thread"]["turns"].as_array().map(Vec::len) != Some(states.len())
-        || states.get(&q.turn_id).map(|turn| turn.status) != Some(TurnStatus::Completed)
-        || states
-            .values()
-            .any(|turn| turn.status == TurnStatus::InProgress)
-    {
-        return Err(invalid(
-            "async answer history is incomplete or changed; no new turn started",
-        ));
-    }
-    Ok(states.into_keys().collect())
-}
-
-fn answer_prompt(q: &Question, option: usize) -> Result<String, ComponentWorkerError> {
-    if option >= q.body.options.len() {
-        return Err(ComponentWorkerError::InvalidComponent);
-    }
-    Ok(store::answer_prompt(q, option)?)
 }
 
 fn confirmation(q: &Question) -> ConfirmationPlan {

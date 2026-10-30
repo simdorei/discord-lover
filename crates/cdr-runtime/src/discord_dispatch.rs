@@ -17,6 +17,7 @@ use twilight_model::{
 };
 
 mod admission;
+mod async_modal;
 mod autocomplete;
 mod claims;
 mod custody;

@@ -160,7 +160,7 @@ pub(crate) async fn deliver_one(
         let _ = write!(body, "\n{}. {option}", index + 1);
     }
     // Renderability does not alter question/final classification or erase its text.
-    let (rows, controls) = match cdr_discord::components::async_choice_rows(&q.id, &q.body.options)
+    let (rows, controls) = match cdr_discord::components::async_answer_rows(&q.id, &q.body.options)
     {
         Ok(rows) => (
             rows,

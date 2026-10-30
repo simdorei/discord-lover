@@ -46,12 +46,14 @@ fn identity(db: &Connection, q: &Question) -> Result<Value> {
     let mut job_identity = serde_json::to_value(&job)?;
     job_identity["created_at"] = json!(job.created_at.to_bits());
     job_identity["updated_at"] = json!(job.updated_at.to_bits());
-    Ok(json!({
+    let mut identity = json!({
         "question": [&q.runtime_id, &q.thread_id, &q.turn_id, &q.item_id, &q.origin_job_id],
         "generation":q.generation,"channel":q.channel_id,"actor":q.owner_user_id,
         "message":q.message_id,"chosen":q.chosen,"body":q.body,
         "reply_job_id":q.reply_job_id,"job":job_identity,
-    }))
+    });
+    super::bind_text(&mut identity, q);
+    Ok(identity)
 }
 
 pub(super) fn seal_in(db: &Connection, id: &str) -> Result<()> {

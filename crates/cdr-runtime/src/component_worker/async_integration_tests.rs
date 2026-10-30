@@ -143,7 +143,7 @@ async fn real_resident_guard_checks_job_identity_and_ignores_historical_policy()
                 channel: 42,
                 actor: 3,
                 message: q.message_id.as_deref().unwrap(),
-                option: 1,
+                answer: aq::Answer::Choice(1),
                 mode: aq::DispatchMode::Start,
                 baseline_turn_ids: vec!["original".into()],
                 prompt: "exact answer",

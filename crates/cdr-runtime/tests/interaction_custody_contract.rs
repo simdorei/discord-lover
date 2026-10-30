@@ -141,14 +141,14 @@ async fn busy_click_freezes_authorization_and_coalesces_across_interaction_ids()
     assert!(receiver.try_recv().is_err());
     let responses = transport.responses.lock().unwrap();
     assert_eq!(responses.len(), 2);
-    let status = responses[1]
-        .data
-        .as_ref()
-        .and_then(|data| data.content.as_deref())
-        .unwrap()
-        .to_ascii_lowercase();
-    assert!(status.contains("saved") && status.contains("review"));
-    assert!(!status.contains("queued") && !status.contains("completed"));
+    assert_eq!(
+        responses[1].kind,
+        twilight_model::http::interaction::InteractionResponseType::DeferredUpdateMessage
+    );
+    assert!(
+        responses[1].data.is_none(),
+        "duplicate clicks must not add a message"
+    );
     drop(responses);
     let duplicate = cdr_store::ingress::by_origin(database.path(), 903)
         .unwrap()

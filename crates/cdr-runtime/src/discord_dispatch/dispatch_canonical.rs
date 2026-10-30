@@ -1,5 +1,5 @@
+use cdr_discord::components::deferred_update;
 use cdr_discord::interaction::RoutedWork;
-use cdr_discord::responses::interaction_message;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 use twilight_model::http::interaction::InteractionResponse;
@@ -88,10 +88,9 @@ impl<T: InteractionTransport> InteractionDispatcher<T> {
         repeat: CanonicalInteraction,
         deadline: Instant,
     ) -> Result<DispatchOutcome, DiscordDispatchError> {
-        let response = interaction_message(
-            "This busy request is already saved and requires manual review. No action was started again.",
-            true,
-        );
+        // Durable custody already owns this request. A repeat acknowledges only
+        // the click, without another notice or another execution attempt.
+        let response = deferred_update();
         self.respond_canonical_status(
             repeat,
             deadline,
@@ -107,10 +106,7 @@ impl<T: InteractionTransport> InteractionDispatcher<T> {
         deadline: Instant,
         outcome: DispatchOutcome,
     ) -> Result<DispatchOutcome, DiscordDispatchError> {
-        let response = interaction_message(
-            "The busy action is already saved, but its confirmation cannot run now. Please retry shortly.",
-            true,
-        );
+        let response = deferred_update();
         self.respond_canonical_status(repeat, deadline, &response, outcome)
             .await
     }

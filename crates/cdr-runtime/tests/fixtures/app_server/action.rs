@@ -107,6 +107,7 @@ pub(super) fn run() -> Result {
                 );
             }
             "thread/read" | "thread/resume" => json!({"thread":{"id":thread,"turns":[]}}),
+            "thread/turns/list" => turn_index(&state, thread),
             "turn/start" => json!({"turn":{"id":"existing-turn","status":"inProgress"}}),
             _ => json!({}),
         };
@@ -203,4 +204,10 @@ fn persist(path: &str, state: &State, input: &Value) -> Result {
         ],
     )?;
     Ok(())
+}
+
+fn turn_index(state: &State, thread: &str) -> Value {
+    json!({"data":if thread == "new-thread" && !state.hide_history {
+                state.turn.iter().cloned().collect::<Vec<_>>()
+            } else { vec![] },"nextCursor":null})
 }

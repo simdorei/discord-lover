@@ -77,6 +77,8 @@ pub fn standard_confirmation_plan(
             ("input", "Codex input choice submitted.")
         }
         ComponentId::Busy { .. }
+        | ComponentId::AsyncTextInput { .. }
+        | ComponentId::AsyncTextAnswer { .. }
         | ComponentId::AsyncChoice { .. }
         | ComponentId::RecoveryPublicationDecision { .. }
         | ComponentId::RecoveryAbandonDecision { .. } => {

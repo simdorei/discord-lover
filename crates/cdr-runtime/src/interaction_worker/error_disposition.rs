@@ -24,6 +24,7 @@ pub fn interaction_error_disposition(
     } else if matches!(
         error,
         InteractionWorkerError::KnownOutcomeNotification(_)
+            | InteractionWorkerError::AsyncAnswerNotice(_)
             | InteractionWorkerError::Component(
                 ComponentWorkerError::ActionUnconfirmed
                     | ComponentWorkerError::ActionOutcomeIndeterminate(_)

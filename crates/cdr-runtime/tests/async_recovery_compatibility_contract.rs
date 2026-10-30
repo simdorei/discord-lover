@@ -16,6 +16,33 @@ async fn check(path: &Path) -> Result<Value, String> {
 }
 
 #[tokio::test]
+async fn free_text_capability_is_supported_but_newer_formats_remain_held() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("store.sqlite");
+    let db = schema::open_initialized(&path).unwrap();
+    db.execute(
+        "INSERT INTO cdr_runtime_capability_requirements(component,format_version) VALUES (?,?)",
+        rusqlite::params![
+            cdr_store::async_question::FREE_TEXT_COMPONENT,
+            cdr_store::async_question::FREE_TEXT_FORMAT_VERSION
+        ],
+    )
+    .unwrap();
+    drop(db);
+    let before = std::fs::read(&path).unwrap();
+    assert_eq!(check(&path).await.unwrap()["compatible"], true);
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let db = schema::open_initialized(&path).unwrap();
+    db.execute(
+        "UPDATE cdr_runtime_capability_requirements SET format_version=2 WHERE component=?",
+        [cdr_store::async_question::FREE_TEXT_COMPONENT],
+    )
+    .unwrap();
+    drop(db);
+    assert!(check(&path).await.unwrap_err().contains("does not support"));
+}
+
+#[tokio::test]
 async fn missing_and_unsupported_databases_are_never_created_or_migrated() {
     let temp = tempfile::tempdir().unwrap();
     let missing = temp.path().join("missing.sqlite");

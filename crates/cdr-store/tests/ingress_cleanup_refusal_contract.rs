@@ -78,6 +78,10 @@ fn mc_8_unknown_or_malformed_outcomes_keep_the_existing_saved_notice() {
     for outcome in [
         json!({"response":"done"}),
         json!({"kind":"mirror_cleanup_refused"}),
+        json!({"kind":"async_answer_not_dispatched"}),
+        json!({"kind":"async_answer_not_dispatched","action_completed":false,
+            "answer_dispatched":true,"thread_id":"target","question_id":"a".repeat(64),
+            "reason":"not proven"}),
         {
             let mut value = refusal();
             value["delete_dispatched"] = json!(true);

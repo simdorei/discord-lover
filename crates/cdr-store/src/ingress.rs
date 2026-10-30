@@ -2,6 +2,8 @@
 //! Receipts never authorize replay: an uncertain unowned effect is held for review.
 
 mod admission;
+mod async_answer_refusal;
+pub use async_answer_refusal::AsyncAnswerRefusal;
 mod busy;
 mod cancellation;
 mod cleanup_refusal;
