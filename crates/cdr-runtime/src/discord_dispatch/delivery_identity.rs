@@ -58,7 +58,9 @@ pub fn component_claim_identity(
     match component {
         ComponentId::RecoveryPublicationDecision { .. }
         | ComponentId::RecoveryAbandonDecision { .. } => None,
-        ComponentId::AsyncChoice { question_id, .. } => Some(question_id.clone()),
+        ComponentId::AsyncChoice { question_id, .. }
+        | ComponentId::AsyncTextInput { question_id }
+        | ComponentId::AsyncTextAnswer { question_id, .. } => Some(question_id.clone()),
         ComponentId::Busy { choice_id, .. } => Some(choice_id.clone()),
         ComponentId::Approval { .. }
         | ComponentId::BoundApproval { .. }
@@ -70,6 +72,12 @@ pub fn component_claim_identity(
 
 fn component_identity(component: &ComponentId) -> String {
     match component {
+        ComponentId::AsyncTextInput { question_id } => format!("async-input:{question_id}"),
+        ComponentId::AsyncTextAnswer { question_id, text } => {
+            let mut identity = format!("async-text:{question_id};");
+            push_field(&mut identity, "text", text);
+            identity
+        }
         ComponentId::RecoveryAbandonDecision {
             proposal_id,
             revision,

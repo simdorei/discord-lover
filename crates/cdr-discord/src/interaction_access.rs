@@ -9,7 +9,7 @@ use twilight_model::{
     },
 };
 
-use crate::interaction::{RoutedWork, route_command, route_component};
+use crate::interaction::{RoutedWork, route_command, route_component, route_modal};
 use crate::responses::{interaction_message, invalid_interaction_message};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -77,6 +77,11 @@ pub fn route_interaction(
             route_command(data, interaction.kind, qa_enabled)
         }
         Some(InteractionData::MessageComponent(data)) => route_component(data),
+        Some(InteractionData::ModalSubmit(data))
+            if interaction.kind == InteractionType::ModalSubmit =>
+        {
+            route_modal(data)
+        }
         Some(_) | None => {
             return envelope(
                 interaction,

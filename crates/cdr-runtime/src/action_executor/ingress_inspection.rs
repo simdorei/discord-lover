@@ -43,6 +43,17 @@ impl<B: TurnBackend> ActionExecutor<B> {
                 ));
                 continue;
             }
+            if let Some(refusal) =
+                cdr_store::ingress::AsyncAnswerRefusal::from_outcome(record.outcome.as_ref())
+            {
+                lines.push(format!(
+                    "{} | status: answer not sent; notification unconfirmed | target: {} | reason: {}",
+                    record.ingress_id,
+                    one_line(&refusal.thread_id),
+                    one_line(&refusal.reason)
+                ));
+                continue;
+            }
             let (status, default_reason) = if record.phase == "cancelled" {
                 (
                     "cancelled; original confirmation pending",
@@ -96,16 +107,19 @@ impl<B: TurnBackend> ActionExecutor<B> {
         // The database payload stays intact. Credential-shaped envelope fields
         // are removed only from this authorized display copy; prompt text is
         // not scanned, rewritten, logged, or sent in an automatic notice.
-        let known_outcome = cdr_store::ingress::CleanupRefusal::from_outcome(
-            record.outcome.as_ref(),
-        )
-        .map_or_else(String::new, |refusal| {
-            format!(
-                "\nknown_outcome: {}\nnotification_confirmed: {}",
-                refusal.message(),
-                record.confirmation_delivered
-            )
-        });
+        let known_outcome =
+            cdr_store::ingress::CleanupRefusal::from_outcome(record.outcome.as_ref())
+                .map(|refusal| refusal.message())
+                .or_else(|| {
+                    cdr_store::ingress::AsyncAnswerRefusal::from_outcome(record.outcome.as_ref())
+                        .map(|refusal| refusal.to_string())
+                })
+                .map_or_else(String::new, |message| {
+                    format!(
+                        "\nknown_outcome: {}\nnotification_confirmed: {}",
+                        message, record.confirmation_delivered
+                    )
+                });
         let mut payload = record.payload;
         redact_credential_fields(&mut payload);
         let payload = serde_json::to_string_pretty(&payload).map_err(|error| {

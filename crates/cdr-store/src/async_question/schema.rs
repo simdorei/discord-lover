@@ -42,13 +42,24 @@ pub(crate) fn migrate_schema(db: &Connection) -> Result<()> {
             [],
         )?;
     }
+    if !has_answer_text(db)? {
+        db.execute(
+            "ALTER TABLE cdr_async_questions ADD COLUMN answer_text TEXT",
+            [],
+        )?;
+    }
     Ok(())
 }
 
 pub(crate) fn schema_current(db: &Connection) -> Result<bool> {
     Ok(db.query_row("SELECT COUNT(*)=2 FROM sqlite_schema WHERE type='table' AND name IN ('cdr_async_questions','cdr_async_question_inbox')", [], |r|r.get::<_,bool>(0))?
         && has_preparation(db)?
+        && has_answer_text(db)?
         && db.query_row("SELECT COUNT(*)=3 FROM pragma_table_info('cdr_async_question_inbox') WHERE name IN ('candidate_generation','candidate_execution_generation','candidate_attempt_count')", [], |r|r.get::<_,bool>(0))?)
+}
+
+fn has_answer_text(db: &Connection) -> Result<bool> {
+    Ok(db.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('cdr_async_questions') WHERE name='answer_text')", [], |r|r.get(0))?)
 }
 
 fn has_preparation(db: &Connection) -> Result<bool> {

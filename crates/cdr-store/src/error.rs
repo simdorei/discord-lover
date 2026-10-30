@@ -4,6 +4,8 @@ pub type Result<T> = std::result::Result<T, StoreError>;
 
 #[derive(Debug, Error)]
 pub enum StoreError {
+    #[error("이전 답변 전달 또는 대기 요청이 남아 있습니다. 처리가 끝난 뒤 다시 답해 주세요.")]
+    AsyncQuestionPendingWork,
     #[error("[cdr-rust:async-resolution-held:v1] {thread_id}: {reason}")]
     AsyncResolutionHeld { thread_id: String, reason: String },
     #[error("room {channel} protected by {reason}")]

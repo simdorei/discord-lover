@@ -1,4 +1,4 @@
-use super::{Question, invalid, read, validate_mapping};
+use super::{Answer, Question, invalid, read, validate_mapping};
 use crate::Result;
 use crate::queue::{NewQueueJob, QueueJobState};
 use crate::schema::open_initialized;
@@ -18,7 +18,7 @@ pub struct Claim<'a> {
     pub channel: i64,
     pub actor: i64,
     pub message: &'a str,
-    pub option: usize,
+    pub answer: Answer,
     pub mode: DispatchMode,
     /// Exact-thread history observed before a Start; unused for a Steer.
     pub baseline_turn_ids: Vec<String>,
@@ -35,7 +35,7 @@ pub fn begin_dispatch(path: &Path, c: &Claim<'_>) -> Result<Question> {
         || q.channel_id != c.channel
         || q.owner_user_id != c.actor
         || q.message_id.as_deref() != Some(c.message)
-        || c.option >= q.body.options.len()
+        || c.answer.validate(&q).is_err()
         || !c.now.is_finite()
     {
         return Err(invalid(
@@ -67,9 +67,7 @@ pub fn begin_dispatch(path: &Path, c: &Claim<'_>) -> Result<Question> {
             ));
         }
         if !jobs.is_empty() {
-            return Err(invalid(
-                "original final delivery or later work is still pending; no new turn started",
-            ));
+            return Err(crate::StoreError::AsyncQuestionPendingWork);
         }
         let job_id = format!("async-question:{}", q.id);
         crate::queue::enqueue_in_transaction(
@@ -114,9 +112,15 @@ pub fn begin_dispatch(path: &Path, c: &Claim<'_>) -> Result<Question> {
         }
         None
     };
-    let option = i64::try_from(c.option).map_err(|_| invalid("invalid option index"))?;
-    tx.execute("UPDATE cdr_async_questions SET state='dispatching',chosen=?,dispatch_mode=?,reply_job_id=?,updated_at=? WHERE id=? AND state='open'",
-        params![option,if c.mode==DispatchMode::Start {"start"} else {"steer"},reply_job,c.now,c.id])?;
+    let option = c
+        .answer
+        .choice()
+        .map(i64::try_from)
+        .transpose()
+        .map_err(|_| invalid("invalid option index"))?;
+    c.answer.require_capability_in(&tx)?;
+    tx.execute("UPDATE cdr_async_questions SET state='dispatching',chosen=?,answer_text=?,dispatch_mode=?,reply_job_id=?,updated_at=? WHERE id=? AND state='open'",
+        params![option,c.answer.text(),if c.mode==DispatchMode::Start {"start"} else {"steer"},reply_job,c.now,c.id])?;
     super::guard::seal_in(&tx, c.id)?;
     let claimed = read(&tx, c.id)?;
     tx.commit()?;

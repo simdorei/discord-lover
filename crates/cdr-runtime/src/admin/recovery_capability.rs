@@ -118,6 +118,15 @@ fn read_required_formats(
             return Err("capability requirements exceed supported bound".into());
         }
         for (component, version) in rows {
+            if component == cdr_store::async_question::FREE_TEXT_COMPONENT
+                && version == cdr_store::async_question::FREE_TEXT_FORMAT_VERSION
+            {
+                let present: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM pragma_table_info('cdr_async_questions') WHERE name='answer_text')", [], |r|r.get(0))?;
+                if !present {
+                    return Err("required free-text answer storage is missing".into());
+                }
+                continue;
+            }
             if component == admission_order::COMPONENT && version == admission_order::FORMAT_VERSION
             {
                 required_order = version;

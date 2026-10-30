@@ -17,6 +17,9 @@ pub struct ActionResult {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ActionUi {
+    PendingBusy {
+        choice_id: String,
+    },
     ProBusy {
         choice_id: String,
     },

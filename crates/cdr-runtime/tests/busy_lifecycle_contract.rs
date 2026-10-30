@@ -12,6 +12,84 @@ use std::{sync::Arc, time::Duration};
 mod support;
 
 #[tokio::test]
+async fn timed_out_pending_request_offers_queue_and_ignore_without_unbound_controls() {
+    let temp = tempfile::tempdir().unwrap();
+    let log = temp.path().join("rpc.jsonl");
+    let server = Arc::new(support::start_fake_server(&temp, &log).await);
+    let db = temp.path().join("mirror.sqlite");
+    cdr_store::queue::enqueue(
+        &db,
+        cdr_store::queue::NewQueueJob {
+            job_id: "timed-out",
+            target_thread_id: "thread-a",
+            channel_id: 10,
+            owner_user_id: Some(20),
+            discord_message_id: Some(100),
+            app_server_generation: 1,
+            prompt: "??",
+            queued: false,
+            ack_sent: true,
+            created_at: 1.0,
+        },
+    )
+    .unwrap();
+    let bridge = Arc::new(BridgeState::new(temp.path().join("bridge.json")));
+    bridge.set_selected_thread_id(Some("thread-a")).unwrap();
+    let executor = ActionExecutor::new(
+        temp.path().join("state.sqlite"),
+        db.clone(),
+        bridge,
+        Arc::new(QueueCoordinator::new(
+            db.clone(),
+            Arc::new(AppServerTurnBackend::new(server.clone())),
+        )),
+    )
+    .with_server(server.clone());
+    let result = executor
+        .execute(
+            CommandAction::Ask {
+                prompt: "next request".into(),
+            },
+            10,
+            20,
+        )
+        .await
+        .unwrap();
+    let Some(ActionUi::PendingBusy { ref choice_id }) = result.ui else {
+        panic!("pending must have no active-turn controls");
+    };
+    let buttons =
+        serde_json::to_value(cdr_runtime::action_ui::render_action_ui(result.ui.as_ref()).unwrap())
+            .unwrap();
+    let ids: Vec<_> = buttons[0]["components"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| b["custom_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            format!("codex_busy:{choice_id}:queue"),
+            format!("codex_busy:{choice_id}:ignore")
+        ]
+    );
+    assert_eq!(
+        cdr_store::control_binding::resolve(&db, choice_id, "thread-a").unwrap(),
+        None
+    );
+    let jobs = cdr_store::queue::list(&db).unwrap();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].job_id, "timed-out");
+    assert!(jobs[0].turn_id.is_none());
+    server.close().await.unwrap();
+    assert!(!support::rpc_log(&log).iter().any(|r| matches!(
+        r["method"].as_str(),
+        Some("turn/start" | "turn/steer" | "turn/interrupt")
+    )));
+}
+
+#[tokio::test]
 async fn steer_now_label_uses_the_same_lifecycle_readiness_as_click_validation() {
     let temp = tempfile::tempdir().unwrap();
     let log = temp.path().join("rpc.jsonl");

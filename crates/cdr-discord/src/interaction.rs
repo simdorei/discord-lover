@@ -17,10 +17,12 @@ use twilight_model::{
 };
 
 use crate::responses::autocomplete_response;
+mod modal;
 use crate::{
     commands::slash_commands,
     components::{ComponentId, parse_component_id},
 };
+pub use modal::route_modal;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InteractionRoute {
@@ -165,13 +167,22 @@ pub fn route_command(
 pub fn route_component(
     data: &MessageComponentInteractionData,
 ) -> Result<InteractionRoute, InteractionRouteError> {
-    let component =
-        parse_component_id(&data.custom_id).ok_or(InteractionRouteError::UnknownComponent)?;
+    let component = if let Some(question) = data.custom_id.strip_prefix("codex_async_select:") {
+        let [value] = data.values.as_slice() else {
+            return Err(InteractionRouteError::UnknownComponent);
+        };
+        parse_component_id(&format!("codex_async:{question}:{value}"))
+    } else {
+        parse_component_id(&data.custom_id)
+    }
+    .ok_or(InteractionRouteError::UnknownComponent)?;
+    let initial_response = if let ComponentId::AsyncTextInput { question_id } = &component {
+        modal::open(question_id)?
+    } else {
+        crate::components::deferred_update()
+    };
     Ok(InteractionRoute {
-        initial_response: InteractionResponse {
-            kind: InteractionResponseType::DeferredUpdateMessage,
-            data: None,
-        },
+        initial_response,
         work: Some(RoutedWork::Component(component)),
     })
 }

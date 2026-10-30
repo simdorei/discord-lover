@@ -9,7 +9,7 @@ mod recovery_abandonment;
 mod recovery_publication;
 mod rows;
 
-pub use async_choice::async_choice_rows;
+pub use async_choice::{async_answer_rows, async_choice_rows};
 pub use claims::{persistent_claim_key, persistent_component_claim_key};
 pub use fingerprint::{ComponentRequestId, request_fingerprint, thread_fingerprint};
 pub use recovery_abandonment::{AbandonDecision, abandonment_decision_rows};
@@ -39,6 +39,13 @@ pub enum ApprovalAnswer {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum ComponentId {
+    AsyncTextInput {
+        question_id: String,
+    },
+    AsyncTextAnswer {
+        question_id: String,
+        text: String,
+    },
     RecoveryAbandonDecision {
         proposal_id: String,
         revision: i64,
@@ -92,6 +99,11 @@ pub fn parse_component_id(custom_id: &str) -> Option<ComponentId> {
     }
     let parts = custom_id.split(':').collect::<Vec<_>>();
     match parts.as_slice() {
+        ["codex_async_other", question] if valid_fingerprint(question, 64) => {
+            Some(ComponentId::AsyncTextInput {
+                question_id: (*question).into(),
+            })
+        }
         ["codex_discard", "v1", proposal, revision, decision] => {
             recovery_abandonment::parse(proposal, revision, decision)
         }

@@ -5,7 +5,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
+mod answer;
 mod dispatch;
+pub(crate) use answer::bind_text;
+pub use answer::{
+    Answer, FREE_TEXT_COMPONENT, FREE_TEXT_FORMAT_VERSION, MAX_ANSWER_CHARS, answer_prompt_with,
+    chosen_answer,
+};
 mod guard;
 pub use guard::validate_dispatch_guards;
 mod inbox;
@@ -50,6 +56,7 @@ pub struct Question {
     pub state: String,
     pub message_id: Option<String>,
     pub chosen: Option<usize>,
+    pub chosen_text: Option<String>,
     pub reply_job_id: Option<String>,
     pub error: String,
 }
@@ -61,15 +68,7 @@ pub fn occurrence_id(thread: &str, turn: &str, item: &str, index: usize) -> Resu
 }
 
 pub fn answer_prompt(q: &Question, option: usize) -> Result<String> {
-    let selected = q
-        .body
-        .options
-        .get(option)
-        .ok_or_else(|| invalid("invalid sealed answer option"))?;
-    let data = serde_json::json!({"thread_id":q.thread_id,"original_turn_id":q.turn_id,
-        "question_item_id":q.item_id,"question_index":q.body.index,"question_title":q.body.title,
-        "selected_option_index":option,"selected_option":selected});
-    Ok(format!("{ANSWER_PREFIX}\n{data}"))
+    answer_prompt_with(q, &Answer::Choice(option))
 }
 
 pub fn get(path: &Path, id: &str) -> Result<Question> {
@@ -90,12 +89,12 @@ pub(crate) fn dispatch_held_in(db: &Connection, thread: &str) -> Result<bool> {
 
 pub(crate) fn read(db: &Connection, id: &str) -> Result<Question> {
     let (mut q, payload): (Question, String) = db.query_row(
-        "SELECT runtime_id,generation,thread_id,turn_id,item_id,origin_job_id,channel_id,owner_user_id,body,state,message_id,chosen,reply_job_id,error FROM cdr_async_questions WHERE id=?",
+        "SELECT runtime_id,generation,thread_id,turn_id,item_id,origin_job_id,channel_id,owner_user_id,body,state,message_id,chosen,reply_job_id,error,answer_text FROM cdr_async_questions WHERE id=?",
         [id], |r| Ok((Question {
             id:id.into(), runtime_id:r.get(0)?, generation:r.get(1)?, thread_id:r.get(2)?,
             turn_id:r.get(3)?, item_id:r.get(4)?, origin_job_id:r.get(5)?, channel_id:r.get(6)?,
             owner_user_id:r.get(7)?, body:QuestionBody{index:0,source_text:String::new(),title:String::new(),options:vec![]},
-            state:r.get(9)?, message_id:r.get(10)?, chosen:r.get::<_,Option<u16>>(11)?.map(usize::from), reply_job_id:r.get(12)?, error:r.get(13)?,
+            state:r.get(9)?, message_id:r.get(10)?, chosen:r.get::<_,Option<u16>>(11)?.map(usize::from), reply_job_id:r.get(12)?, error:r.get(13)?, chosen_text:r.get(14)?,
         }, r.get(8)?)))?;
     q.body = serde_json::from_str(&payload)?;
     Ok(q)

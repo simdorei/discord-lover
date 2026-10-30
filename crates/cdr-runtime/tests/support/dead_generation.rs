@@ -103,6 +103,13 @@ fn fake_app_server_fixture() {
             }
             "test/hang" => continue,
             "thread/read" => json!({"thread":{"id":target,"turns":[],"status":{"type":"idle"}}}),
+            "thread/turns/list" => {
+                assert_eq!(message["params"]["itemsView"], "notLoaded");
+                assert_eq!(message["params"]["sortDirection"], "desc");
+                assert_eq!(message["params"]["limit"], 100);
+                assert!(message["params"]["cursor"].is_null());
+                json!({"data":[],"nextCursor":null})
+            }
             "thread/resume" => json!({"thread":{"id":target}}),
             "thread/fork" => json!({"thread":{"id":format!("{target}-fork")}}),
             "turn/start" => json!({"turn":{"id":"new-turn","status":"inProgress"}}),

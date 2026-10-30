@@ -1,10 +1,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use cdr_app_server::outcomes::parse_thread_turn_states;
 use cdr_app_server::requests::{
-    fork_thread_persistent, read_thread_with_timeout, resume_thread_with_timeout, start_turn,
-    start_turn_with_input,
+    fork_thread_persistent, resume_thread_with_timeout, start_turn, start_turn_with_input,
 };
 use cdr_app_server::{AppServerError, ResidentAppServer, extract_thread_id};
 use serde_json::Value;
@@ -12,6 +10,7 @@ use serde_json::Value;
 mod async_history;
 mod async_terminal;
 mod fresh_thread;
+pub(crate) mod turn_index;
 
 use crate::queue_runner::{BackendFailure, BoxBackendFuture, TurnBackend, TurnRecord};
 
@@ -121,23 +120,7 @@ impl TurnBackend for AppServerTurnBackend {
             if self.fresh_threads.contains(thread_id, self.generation()) {
                 return Ok(Vec::new());
             }
-            let result = self
-                .server
-                .execute(
-                    read_thread_with_timeout(thread_id, true, self.history_read_timeout),
-                    Some(self.generation()),
-                )
-                .await
-                .map_err(|error| definite(&error))?;
-            let states = parse_thread_turn_states(&result, thread_id)
-                .map_err(|error| BackendFailure::definite(error.to_string()))?;
-            Ok(states
-                .into_values()
-                .map(|turn| TurnRecord {
-                    turn_id: turn.turn_id,
-                    status: turn.status,
-                })
-                .collect())
+            self.read_turn_index(thread_id).await
         })
     }
 

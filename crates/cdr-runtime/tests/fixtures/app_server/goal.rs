@@ -39,7 +39,7 @@ pub(super) fn run() -> Result {
             "thread/goal/get" => {
                 json!({"goal":{"threadId":"thread","status":if goal_done || Path::new(&format!("{rollout}.goal-complete")).exists() {"complete"} else {"active"}}})
             }
-            "thread/read" => {
+            "thread/read" | "thread/turns/list" => {
                 let turns = if Path::new(&format!("{rollout}.omit-history")).exists() {
                     vec![]
                 } else if goal_done {
@@ -47,7 +47,14 @@ pub(super) fn run() -> Result {
                 } else {
                     vec![("T1", "progress")]
                 };
-                json!({"thread":{"id":"thread","turns":turns.into_iter().map(|(id,text)| json!({"id":id,"status":"completed","items":[{"type":"agentMessage","text":text,"phase":"final_answer"}]})).collect::<Vec<_>>()}})
+                if method(&request) == "thread/turns/list" {
+                    assert_eq!(request["params"]["itemsView"], "notLoaded");
+                    json!({"data":turns.into_iter().rev().map(|(id,_)|
+                        json!({"id":id,"status":"completed","items":[],"itemsStatus":"notLoaded"})
+                    ).collect::<Vec<_>>(),"nextCursor":null})
+                } else {
+                    json!({"thread":{"id":"thread","turns":turns.into_iter().map(|(id,text)| json!({"id":id,"status":"completed","items":[{"type":"agentMessage","text":text,"phase":"final_answer"}]})).collect::<Vec<_>>()}})
+                }
             }
             _ => json!({}),
         };

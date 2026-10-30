@@ -6,12 +6,18 @@ use serde_json::Value;
 
 use crate::discord_dispatch::InteractionProcessingMode;
 
+#[derive(Clone, Copy, Debug)]
+enum KnownRefusal {
+    Cleanup,
+    AsyncAnswer,
+}
+
 #[derive(Debug)]
 pub(super) struct ExecutionCustody {
     database: PathBuf,
     ingress_id: String,
     result_recorded: bool,
-    known_cleanup_refusal: bool,
+    known_refusal: Option<KnownRefusal>,
     armed: bool,
 }
 
@@ -74,7 +80,7 @@ impl ExecutionCustody {
             database,
             ingress_id: ingress_id.to_owned(),
             result_recorded: false,
-            known_cleanup_refusal: false,
+            known_refusal: None,
             armed: true,
         })
     }
@@ -82,8 +88,15 @@ impl ExecutionCustody {
     pub(super) fn record_result(&mut self, outcome: &Value) -> Result<(), StoreError> {
         cdr_store::ingress::record_result(&self.database, &self.ingress_id, outcome, now()?)?;
         self.result_recorded = true;
-        self.known_cleanup_refusal =
-            cdr_store::ingress::CleanupRefusal::from_outcome(Some(outcome)).is_some();
+        self.known_refusal = if cdr_store::ingress::CleanupRefusal::from_outcome(Some(outcome))
+            .is_some()
+        {
+            Some(KnownRefusal::Cleanup)
+        } else if cdr_store::ingress::AsyncAnswerRefusal::from_outcome(Some(outcome)).is_some() {
+            Some(KnownRefusal::AsyncAnswer)
+        } else {
+            None
+        };
         Ok(())
     }
 
@@ -91,18 +104,21 @@ impl ExecutionCustody {
         &mut self,
         outcome: &Value,
     ) -> Result<(), super::InteractionWorkerError> {
-        self.finish_success(outcome).map_err(|error| {
-            if self.known_cleanup_refusal {
-                crate::cleanup_refusal::NotificationFailure::confirmation(
-                    &self.database,
-                    &self.ingress_id,
-                    error,
-                )
-                .into()
-            } else {
-                error.into()
-            }
-        })
+        self.finish_success(outcome)
+            .map_err(|error| match self.known_refusal {
+                Some(KnownRefusal::AsyncAnswer) => {
+                    super::InteractionWorkerError::AsyncAnswerNotice(error.to_string())
+                }
+                Some(KnownRefusal::Cleanup) => {
+                    crate::cleanup_refusal::NotificationFailure::confirmation(
+                        &self.database,
+                        &self.ingress_id,
+                        error,
+                    )
+                    .into()
+                }
+                None => error.into(),
+            })
     }
 
     pub(super) fn finish_success(&mut self, outcome: &Value) -> Result<(), StoreError> {

@@ -65,6 +65,19 @@ impl<T: InteractionTransport> InteractionDispatcher<T> {
         if Instant::now() >= deadline {
             return Ok(DispatchOutcome::DeadlineExceeded);
         }
+        if !admission_sealed
+            && tag == InteractionIngressTag::Normal
+            && let Some(modal) = super::async_modal::response(&self.ingress_db, &routed)
+        {
+            if !self
+                .acknowledge_until(routed.interaction_id, &routed.token, &modal, deadline)
+                .await?
+            {
+                return Ok(DispatchOutcome::DeadlineExceeded);
+            }
+            super::dispatch_response::commit_claim(claim)?;
+            return Ok(DispatchOutcome::RespondedWithoutWork);
+        }
         let executable = !admission_sealed
             && tag == InteractionIngressTag::Normal
             && routed

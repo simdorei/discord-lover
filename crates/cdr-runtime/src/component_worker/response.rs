@@ -32,6 +32,8 @@ pub fn build_component_response(
 ) -> Result<ComponentResponse, ComponentWorkerError> {
     match component {
         ComponentId::AsyncChoice { .. }
+        | ComponentId::AsyncTextInput { .. }
+        | ComponentId::AsyncTextAnswer { .. }
         | ComponentId::RecoveryPublicationDecision { .. }
         | ComponentId::RecoveryAbandonDecision { .. } => {
             Err(ComponentWorkerError::InvalidComponent)

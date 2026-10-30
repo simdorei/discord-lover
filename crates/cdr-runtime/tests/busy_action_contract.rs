@@ -162,25 +162,34 @@ async fn busy_button_does_not_claim_steer_now_after_original_turn_disappears() {
         )
         .await
         .unwrap();
-    let ActionUi::Busy {
-        allow_steer,
-        choice_id,
-    } = result.ui.unwrap()
-    else {
-        panic!("expected busy controls")
+    let Some(ActionUi::PendingBusy { ref choice_id }) = result.ui else {
+        panic!("a disappeared turn must have pending-only controls")
     };
     assert!(
-        !allow_steer,
-        "the label must use the bound turn, not an earlier busy snapshot"
-    );
-    assert!(
-        !get_busy_choice(executor.mirror_db(), &choice_id, 0.0)
+        !get_busy_choice(executor.mirror_db(), choice_id, 0.0)
             .unwrap()
             .unwrap()
             .allow_steer
     );
     assert_eq!(
-        cdr_store::control_binding::resolve(executor.mirror_db(), &choice_id, "thread-a").unwrap(),
+        cdr_store::control_binding::resolve(executor.mirror_db(), choice_id, "thread-a").unwrap(),
         None
+    );
+    let rendered =
+        serde_json::to_value(cdr_runtime::action_ui::render_action_ui(result.ui.as_ref()).unwrap())
+            .unwrap();
+    let ids: Vec<_> = rendered[0]["components"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|button| button["custom_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            format!("codex_busy:{choice_id}:queue"),
+            format!("codex_busy:{choice_id}:ignore")
+        ],
+        "no Steer or Stop may target the vanished turn"
     );
 }

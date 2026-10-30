@@ -410,6 +410,7 @@ struct FakeInteractions {
     fail_ack: bool,
 }
 
+mod question_input_contracts;
 mod response_contracts;
 mod revision_contracts;
 impl Interactions for FakeInteractions {

@@ -330,3 +330,71 @@ mod integrated;
 
 #[path = "async_inherited_tests.rs"]
 mod inherited;
+
+#[path = "async_answer_read_tests.rs"]
+mod read_path;
+
+#[tokio::test]
+async fn free_text_reaches_only_original_question_once_without_parsing_as_choices() {
+    let http = approval_http::start().await;
+    let temp = tempfile::tempdir().unwrap();
+    let f = fixture(&temp, http_client(&http.address)).await;
+    control(&f, "test/active-turn").await;
+    let (id, mut work) = question(&f).await;
+    let text = "제 선택은 따로 있어요\nA=B | C=보류 🙂";
+    let component = ComponentId::AsyncTextAnswer {
+        question_id: id.clone(),
+        text: text.into(),
+    };
+    work.work = cdr_discord::interaction::RoutedWork::Component(component.clone());
+    let source = work.source_message_id;
+    work.source_message_id = Some(Id::new(999));
+    assert!(
+        handle_component_work(&work, &component, &f.executor, &f.server)
+            .await
+            .is_err()
+    );
+    assert_eq!(aq::get(f.executor.mirror_db(), &id).unwrap().state, "open");
+    work.source_message_id = source;
+    let (a, b) = tokio::join!(
+        handle_component_work(&work, &component, &f.executor, &f.server),
+        handle_component_work(&work, &component, &f.executor, &f.server)
+    );
+    assert!(a.is_ok() && b.is_ok());
+    let q = aq::get(f.executor.mirror_db(), &id).unwrap();
+    assert_eq!(q.state, "submitted");
+    assert_eq!(q.chosen, None);
+    assert_eq!(q.chosen_text.as_deref(), Some(text));
+    let other = aq::occurrence_id("thread-b", "original", "question-call", 0).unwrap();
+    assert_eq!(
+        aq::get(f.executor.mirror_db(), &other).unwrap().state,
+        "open"
+    );
+    assert!(matches!(
+        handle_component_work(
+            &work,
+            &ComponentId::AsyncChoice {
+                question_id: id,
+                option: 0
+            },
+            &f.executor,
+            &f.server
+        )
+        .await,
+        Err(ComponentWorkerError::AlreadyHandled)
+    ));
+    f.server.close().await.unwrap();
+    http.stop.send(()).unwrap();
+    http.task.await.unwrap();
+    let rpc = app_fixture::rpc_log(&temp.path().join("rpc.jsonl"));
+    let steers: Vec<_> = rpc.iter().filter(|r| r["method"] == "turn/steer").collect();
+    assert_eq!(steers.len(), 1);
+    assert_eq!(steers[0]["params"]["expectedTurnId"], "original");
+    let prompt = steers[0]["params"]["input"][0]["text"].as_str().unwrap();
+    let data: serde_json::Value = serde_json::from_str(prompt.split_once('\n').unwrap().1).unwrap();
+    assert_eq!(data["question_index"], 1);
+    assert_eq!(data["question_title"], "프로젝트 B?");
+    assert_eq!(data["answer_text"], text);
+    assert!(data.get("selected_option").is_none());
+    assert!(!rpc.iter().any(|r| r["method"] == "turn/start"));
+}

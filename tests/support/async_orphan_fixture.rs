@@ -59,7 +59,7 @@ pub fn dispatching(db: &Path, runtime: &str) -> String {
             channel: 20,
             actor: 30,
             message: "1234",
-            option: 0,
+            answer: aq::Answer::Choice(0),
             mode: aq::DispatchMode::Steer,
             baseline_turn_ids: Vec::new(),
             prompt: "only this answer",
