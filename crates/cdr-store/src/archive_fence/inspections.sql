@@ -5,6 +5,20 @@ SELECT ingress_id FROM discord_ingress_journal AS d WHERE
         OR json_type(payload_json,'$.plan.Execute.SavedRequest')='object'))
     OR (kind='interaction' AND json_extract(payload_json,'$.version')=1
         AND json_extract(payload_json,'$.work.Slash.name') IN ('help','runners','doctor','where'))
+    -- A distinct explicit archive may replace a previous uncertain attempt.
+    -- Admission is not execution authority: lifecycle custody still validates
+    -- the original command, actor, room and frozen target before dispatch.
+    OR (kind='message' AND application_id IS NULL
+        AND owner_user_id>0 AND channel_id>0 AND event_id>0 AND source_message_id=event_id
+        AND json_extract(payload_json,'$.version')=1
+        AND json_type(payload_json,'$.author_is_bot')='false'
+        AND json_type(payload_json,'$.plan.Execute.Archive')='object'
+        AND json_type(payload_json,'$.lifecycle_binding.command.Archive')='object'
+        AND json_extract(payload_json,'$.lifecycle_binding.target')=target_thread_id)
+    OR (kind='interaction' AND application_id>0 AND owner_user_id>0 AND channel_id>0
+        AND json_extract(payload_json,'$.version')=1
+        AND json_extract(payload_json,'$.work.Slash.name')='archive'
+        AND target_thread_id IS NOT NULL)
     OR (kind='message' AND application_id IS NULL
         AND owner_user_id>0 AND channel_id>0 AND event_id>0 AND source_message_id=event_id
         AND target_thread_id IS NOT NULL AND length(target_thread_id)>0

@@ -297,7 +297,7 @@ impl Fixture {
 }
 
 #[tokio::test]
-async fn bound_archive_preserves_verified_descendant_resume_and_persistence() {
+async fn bound_archive_verifies_descendant_persistence_without_resuming() {
     let f = Fixture::new("descendant_normal", None).await;
     let (key, action, context) = f.admit();
     let result = f
@@ -309,8 +309,8 @@ async fn bound_archive_preserves_verified_descendant_resume_and_persistence() {
         result.is_ok(),
         "normal bound descendant archive must succeed: {result:?}"
     );
-    assert_eq!(f.calls("thread/resume", "thread-b"), 1);
-    assert_eq!(f.calls("thread/resume", "child"), 1);
+    assert_eq!(f.calls("thread/resume", "thread-b"), 0);
+    assert_eq!(f.calls("thread/resume", "child"), 0);
     assert_eq!(f.calls("thread/archive", "thread-b"), 1);
     assert_eq!(f.archived(), 2);
     assert_eq!(f.calls("turn/start", "thread-b"), 0);
@@ -349,7 +349,7 @@ async fn final_archive_writer_rechecks_both_root_and_verified_child_revision() {
         f.server.close().await.unwrap();
         assert!(f.fence.fired.load(Ordering::Acquire));
         assert!(result.is_err(), "{target}: {result:?}");
-        assert_eq!(f.calls("thread/resume", "child"), 1);
+        assert_eq!(f.calls("thread/resume", "child"), 0);
         assert_eq!(f.calls("thread/archive", "thread-b"), 0);
         assert_eq!(f.archived(), 0);
         assert!(cdr_store::archive_fence::target_is_fenced(&f.db, "thread-b").unwrap());
@@ -359,7 +359,7 @@ async fn final_archive_writer_rechecks_both_root_and_verified_child_revision() {
 
 #[tokio::test]
 async fn changed_or_invalid_descendant_scope_still_refuses_archive() {
-    for scenario in ["descendant_changed", "scope_root", "descendant_writer"] {
+    for scenario in ["descendant_changed", "scope_root"] {
         let f = Fixture::new(scenario, None).await;
         let (key, action, context) = f.admit();
         let result = f

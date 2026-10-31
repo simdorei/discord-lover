@@ -40,7 +40,7 @@ fn count(db: &Path) -> i64 {
 }
 
 #[test]
-fn simultaneous_admission_and_reservation_have_exactly_one_executable_winner() {
+fn explicit_archive_wins_admission_race_without_discarding_saved_input() {
     for index in 0..20 {
         let temp = tempfile::tempdir().unwrap();
         let db = temp.path().join("db.sqlite");
@@ -59,14 +59,11 @@ fn simultaneous_admission_and_reservation_have_exactly_one_executable_winner() {
         let record = ingress::admit(&db, &request).unwrap().record.unwrap();
         let reservation = archive.join().unwrap();
         assert_eq!(record.payload, request.payload);
-        if reservation.is_ok() {
-            assert_eq!(record.state, "held");
-            assert_eq!(count(&db), 2);
-            assert!(!ingress::begin_execution(&db, "message:70", "processing", None, 4.0).unwrap());
-        } else {
-            assert_eq!(record.state, "staged");
-            assert_eq!(count(&db), 0);
-            assert!(ingress::begin_execution(&db, "message:70", "processing", None, 4.0).unwrap());
+        reservation.unwrap();
+        assert_eq!(count(&db), 2);
+        match ingress::begin_execution(&db, "message:70", "processing", None, 4.0) {
+            Ok(started) => assert!(!started),
+            Err(error) => assert!(error.to_string().contains("archive fence"), "{error}"),
         }
     }
 }
@@ -240,4 +237,81 @@ fn missing_archive_extension_is_backed_up_and_repaired_without_changing_shared_v
             .unwrap(),
         0
     );
+}
+
+#[test]
+fn a_new_explicit_archive_is_admitted_through_an_old_archive_fence() {
+    let temp = tempfile::tempdir().unwrap();
+    let db = temp.path().join("db.sqlite");
+    let first = archive_fence::reserve(&db, &scope(), None).unwrap();
+    let mut next = request(Some("root"));
+    next.payload = json!({"version":1,"author_is_bot":false,"content":"!archive",
+        "plan":{"Execute":{"Archive":{"reference":null}}},
+        "lifecycle_binding":{"target":"root","route":"Mapped","command":{"Archive":{"reference":null}}}});
+    let admitted = ingress::admit(&db, &next).unwrap().record.unwrap();
+    assert_eq!(admitted.state, "staged");
+    assert!(
+        ingress::begin_execution(&db, &admitted.ingress_id, "processing", Some("root"), 4.0)
+            .unwrap()
+    );
+    let second = archive_fence::reserve(&db, &scope(), Some(&admitted.ingress_id)).unwrap();
+    assert_ne!(first, second);
+    assert_eq!(count(&db), 2);
+}
+
+#[test]
+fn rejected_manual_retry_preserves_prior_uncertainty_and_success_can_verify_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let db = temp.path().join("db.sqlite");
+    let first = archive_fence::reserve(&db, &["root".into()].into(), None).unwrap();
+    let retry = archive_fence::reserve(&db, &scope(), None).unwrap();
+    archive_fence::release_rejected(&db, &retry).unwrap();
+    assert_eq!(count(&db), 1);
+    let connection = schema::open_initialized(&db).unwrap();
+    let prior: (String, String) = connection
+        .query_row(
+            "SELECT operation_id,phase FROM codex_archive_fences WHERE target_thread_id='root'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(prior, (first.operation_id, "attempted".into()));
+    let next = archive_fence::reserve(&db, &scope(), None).unwrap();
+    archive_fence::verified(&db, &next).unwrap();
+    let verified: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM codex_archive_fences WHERE phase='verified'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(verified, 2);
+}
+
+#[test]
+fn previous_inspection_view_upgrades_with_backup_and_preserves_existing_fence() {
+    let temp = tempfile::tempdir().unwrap();
+    let db = temp.path().join("db.sqlite");
+    archive_fence::reserve(&db, &scope(), None).unwrap();
+    let mut connection = schema::open_initialized(&db).unwrap();
+    connection
+        .execute_batch("DROP VIEW cdr_archive_inspections_v1;")
+        .unwrap();
+    connection
+        .execute_batch(include_str!(
+            "../src/archive_fence/inspections_before_explicit_archive.sql"
+        ))
+        .unwrap();
+    let backup = schema::initialize(&mut connection, &db).unwrap().unwrap();
+    assert!(backup.is_file());
+    let definition: String = connection
+        .query_row(
+            "SELECT sql FROM sqlite_schema WHERE name='cdr_archive_inspections_v1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(definition.contains("$.plan.Execute.Archive"));
+    assert_eq!(count(&db), 2);
+    assert!(schema::initialize(&mut connection, &db).unwrap().is_none());
 }

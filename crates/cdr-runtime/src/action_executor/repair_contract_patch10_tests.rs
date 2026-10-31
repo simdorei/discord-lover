@@ -52,7 +52,7 @@ async fn archive_fence_created_while_waiting_for_target_lock_blocks_reset() {
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(operation, reservation);
+    assert_eq!(operation, reservation.operation_id);
     fixture.server.close().await.unwrap();
 }
 

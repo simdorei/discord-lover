@@ -117,14 +117,14 @@ fn assert_archived(state: &std::path::Path) {
 }
 
 #[tokio::test]
-async fn archive_preserves_queued_and_intake_work_without_remote_effect() {
-    scenario("queued", false, 0).await;
-    scenario("intake", false, 0).await;
+async fn archive_preserves_queued_and_intake_work_while_archiving() {
+    scenario("queued", true, 1).await;
+    scenario("intake", true, 1).await;
 }
 
 #[tokio::test]
-async fn active_turn_appearing_during_resume_blocks_archive() {
-    scenario("became_active", false, 0).await;
+async fn archive_does_not_resume_or_require_an_idle_turn() {
+    scenario("became_active", true, 1).await;
 }
 
 #[tokio::test]
@@ -134,8 +134,8 @@ async fn archive_requires_persisted_effect_before_reporting_success() {
 }
 
 #[tokio::test]
-async fn descendant_work_and_invalid_inventory_block_parent_archive() {
-    scenario("descendant_queued", false, 0).await;
+async fn descendant_work_is_preserved_and_invalid_inventory_is_rejected() {
+    scenario("descendant_queued", true, 1).await;
     scenario("scope_malformed", false, 0).await;
 }
 
@@ -146,9 +146,9 @@ async fn descendant_archive_effects_are_verified_together() {
 }
 
 #[tokio::test]
-async fn changed_scope_or_foreign_child_writer_never_forks_or_archives() {
+async fn changed_scope_is_rejected_and_native_descendant_effects_are_verified() {
     scenario("descendant_changed", false, 0).await;
-    scenario("descendant_writer", false, 0).await;
+    scenario("descendant_writer", false, 1).await;
 }
 
 #[tokio::test]
@@ -159,7 +159,7 @@ async fn invalid_scope_pagination_never_dispatches_archive() {
 }
 
 #[tokio::test]
-async fn cache_absence_is_not_idle_evidence_for_archive() {
+async fn archive_does_not_depend_on_resumed_or_idle_status() {
     for name in [
         "active_without_event",
         "missing_status",
@@ -169,6 +169,6 @@ async fn cache_absence_is_not_idle_evidence_for_archive() {
         "conflicting_resume",
         "missing_nested_resume",
     ] {
-        scenario(name, false, 0).await;
+        scenario(name, true, 1).await;
     }
 }

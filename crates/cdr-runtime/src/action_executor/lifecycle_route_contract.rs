@@ -145,7 +145,15 @@ async fn lifecycle_unchanged_and_explicit_routes_work_but_legacy_binding_is_not_
         } else {
             result.unwrap();
             assert_eq!(traffic.len(), 1);
-            assert!(calls.iter().any(|v| v["method"] == "thread/read"));
+            if command.starts_with("!archive") {
+                assert!(calls.iter().any(|v| v["method"] == "thread/archive"));
+                assert!(!calls.iter().any(|v| matches!(
+                    v["method"].as_str(),
+                    Some("thread/read" | "thread/resume")
+                )));
+            } else {
+                assert!(calls.iter().any(|v| v["method"] == "thread/read"));
+            }
             for call in calls.iter().filter(|v| {
                 matches!(
                     v["method"].as_str(),

@@ -1,0 +1,105 @@
+{
+  "snapshot_note": "This evidence and the source hashes describe the reviewed and deployed candidate before publication-only Rust formatting, test future boxing and lint annotation, help-text correction and plugin cache version update. CI validates the publication commit separately.",
+  "baseline": {
+    "source_archive": "source-b67d212.zip",
+    "deployed_commit": "b67d2125206eacdc2198c4e28648df259bb2e13b",
+    "baseline_tree": "bcc259acf21600e3329d545b82133d21bbdb68c6",
+    "archive_sha256": "2062a884d52e6606d1748c99aa770a4fc80b12f76bc3ec6a22d67100311b39b8",
+    "files": 2090
+  },
+  "historical_test_first_evidence": {
+    "baseline": "6b6255d44e465572c33cb051e13bf889cbfb7646",
+    "red": {
+      "command": "cargo test --locked -p cdr-runtime --test archive_explicit_contract -- --nocapture",
+      "tests": 2,
+      "failed": 2,
+      "reasons": [
+        "unfinished ingress prevents native archive dispatch",
+        "archive incorrectly performs thread/resume and thread/read"
+      ]
+    },
+    "first_green": {
+      "tests": 2,
+      "passed": 2,
+      "seconds": 1.07
+    },
+    "note": "These initial reproductions preceded transplantation onto the actual deployed source."
+  },
+  "regression": {
+    "runtime_archive_integration": {
+      "passed": 20,
+      "failed": 0,
+      "suites": [
+        "archive_explicit_contract",
+        "archive_ingress_contract",
+        "archive_lifecycle_contract",
+        "archive_deadline_contract",
+        "archive_rpc_outcome_contract",
+        "archive_late_ingress_contract",
+        "archive_writer_fence_contract"
+      ]
+    },
+    "runtime_archive_library": {
+      "passed": 27,
+      "failed": 0,
+      "filter": "archive_"
+    },
+    "store_archive_and_stop": {
+      "passed": 19,
+      "failed": 0,
+      "suites": [
+        "archive_fence_contract",
+        "archive_disposition_contract",
+        "stop_archive_origin_contract"
+      ]
+    },
+    "app_server_library": {
+      "passed": 126,
+      "failed": 0,
+      "ignored_helper_tests": 5
+    },
+    "additional_checks": [
+      "old idle-release hold blocks ordinary resume but allows explicit archive",
+      "previous SQLite inspection view migration matches the live LF definition exactly",
+      "rejected manual retry preserves a previous uncertain archive fence",
+      "git diff --check"
+    ],
+    "unique_passed": 192,
+    "note": "All listed suites passed again on the exact deployed b67d212 baseline with this archive patch; repeated runs excluded."
+  },
+  "production": {
+    "source_integration": "Only the 21 archive patch paths differ from the exact deployed source tree; unrelated local working-tree changes were preserved.",
+    "source_tree": "921def76ab90f8e812392834827f95a7d4d20cff",
+    "binary": "cdr-runtime.live-b67d212.exe",
+    "candidate_sha256": "291468061814b8579d332a4459f8dd283c6dbf5afbcadfcf163a287fa4d229e1",
+    "candidate_size": 40293888,
+    "baseline_binary_sha256": "d3d369802328937310a1203d6b0f1e2623f26f2d924d64c34ee202302a2ccc5f",
+    "release_build": "passed: cargo build --locked --release -p cdr-runtime --bin cdr-runtime",
+    "activation": "Deployed and verified on 2026-10-31: matching executable hash, advancing healthy heartbeats, fresh Discord readiness, expected SQLite view and successful database quick_check.",
+    "superseded_candidate": {
+      "sha256": "1ce5405d52587c9a7920ff97fdcb43e62a5b7df88dd077d61e35b23bf8412dbe",
+      "reason": "Prepared from an older local source tree; never deployed"
+    }
+  },
+  "source_sha256": {
+    "crates/cdr-app-server/src/manager/dispatch.rs": "a2906ea7588eff4e0ddb98247cade089ac00f5458ae38760e362f33d1c65fc04",
+    "crates/cdr-app-server/src/manager/target_mutation.rs": "bf2b03a918da967b221ebe34b01724e6f7036cf6c4a71de86e18d6074559451d",
+    "crates/cdr-runtime/src/action_executor/archive_action.rs": "9519d04404cd0398892b75fd21efd812c3e5bfa542b482260fe3dbc0f1362437",
+    "crates/cdr-runtime/src/action_executor/archive_dispatch.rs": "541e7cf787be4943c2168723d1e7e53019be94dfda8c08b84015f912aa2f220e",
+    "crates/cdr-runtime/src/action_executor/archive_refusal_tests.rs": "47f970e45678152223aa62cb951b0f5c69a66e9d9b6ba2680a8037711170fa24",
+    "crates/cdr-runtime/src/action_executor/lifecycle_route_contract.rs": "43735ce841bbbebb9e17396d3734c320f26efd518afbeff47ffd5f7c920b2b9b",
+    "crates/cdr-runtime/src/action_executor/repair_contract_patch10_tests.rs": "717ec12581b2798907f4b6e9d1f727fadbf2b0fac47e6e6ff5b10fe75b5128f7",
+    "crates/cdr-runtime/src/action_executor/settings_custody/archive_tests.rs": "7f8e42540c4c7d92f3b90025e99fd89dbaf15f9edb645f7bf73a057a0c470ca1",
+    "crates/cdr-runtime/src/async_orphan_tests/history/control_disposition.rs": "b3c6fe29cf47fec69dcc9e5ec999461a85f620978c1a6bd3e4b5b8553a12d39a",
+    "crates/cdr-runtime/src/dead_generation_recovery.rs": "32528e5df57a6942af6ee128be8b91c07e204fe2d7cc519492194c8e22bbb443",
+    "crates/cdr-runtime/tests/archive_explicit_contract.rs": "2552a00e9b627802b804a938e387c07ecd74133e961ea13561c1194ca0eaf60c",
+    "crates/cdr-runtime/tests/archive_ingress_contract.rs": "f9eb0f2409ea8e248c8b2cabc336b6428215ea54e06bc24d6892d8c705e5e30e",
+    "crates/cdr-runtime/tests/archive_lifecycle_contract.rs": "396da3a3925be279e3b6c5af3aa4643c227a3bdb61da68247f41c836cf0affa5",
+    "crates/cdr-runtime/tests/fixtures/app_server/archive.rs": "afe5989468800143be7f50f596cba2431bdf527eaa64b8c5ff718b847a2f80bc",
+    "crates/cdr-store/src/archive_fence.rs": "8a6e06a75f0b9239791cc39fe7c94136e2c1312c0274cbe8aa627e66129f173b",
+    "crates/cdr-store/src/archive_fence/inspections.sql": "89880bbf82ef45198125aa8004627d53c7345be7a602692eec3a9c70e27e2a65",
+    "crates/cdr-store/src/archive_fence/inspections_before_explicit_archive.sql": "f26c260acb579bdce584082575967ec7bc05391711ff397f2937b729f4b4c17d",
+    "crates/cdr-store/src/archive_fence/schema.rs": "c44e5307bf3bb8a7cf5ae23e5712818cd2445162f9cabbf9c69401cd3189c617",
+    "crates/cdr-store/tests/archive_fence_contract.rs": "87eff3eda8dfe8b84a0f333561a218034856d76aed4dbeefc7d21810776ef1c1"
+  }
+}

@@ -105,7 +105,10 @@ fn persist_archive(scenario: &str, thread: &str) -> Result {
         "UPDATE threads SET archived=1, archived_at=60 WHERE id=?",
         [thread],
     )?;
-    if matches!(scenario, "descendant_normal" | "descendant_gate") {
+    if matches!(
+        scenario,
+        "descendant_normal" | "descendant_gate" | "descendant_queued"
+    ) {
         tx.execute(
             "UPDATE threads SET archived=1, archived_at=60 WHERE id='child'",
             [],

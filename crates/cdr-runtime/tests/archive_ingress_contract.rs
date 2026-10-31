@@ -110,9 +110,9 @@ async fn scenario(name: &str, expected: bool) {
 }
 
 #[tokio::test]
-async fn intake_not_yet_created_is_still_protected_from_archive() {
-    scenario("pending", false).await;
-    scenario("unbound", false).await;
+async fn pending_and_unbound_ingress_does_not_block_explicit_archive() {
+    scenario("pending", true).await;
+    scenario("unbound", true).await;
 }
 
 #[tokio::test]
