@@ -74,7 +74,7 @@ pub fn pending(path: &Path) -> Result<Vec<PendingCommentary>> {
     let c = open_initialized(path)?;
     Ok(c.prepare(
         "SELECT sequence,job_id,target_thread_id,turn_id,channel_id,text
-        FROM codex_commentary_outbox ORDER BY sequence",
+        FROM cdr_live_codex_commentary_outbox ORDER BY sequence",
     )?
     .query_map([], read)?
     .collect::<rusqlite::Result<Vec<_>>>()?)

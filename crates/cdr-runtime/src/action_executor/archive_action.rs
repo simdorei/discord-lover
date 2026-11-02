@@ -1,7 +1,7 @@
+use super::operator_actions::original_owner_error;
 use super::{ActionError, ActionExecutor, ActionResult, immediate};
-use super::{app_server_requests::resume_request, operator_actions::original_owner_error};
 use crate::queue_runner::TurnBackend;
-use cdr_app_server::requests::{archive_thread, read_thread};
+use cdr_app_server::requests::archive_thread;
 use std::collections::BTreeSet;
 use std::time::Duration;
 #[path = "archive_dispatch.rs"]
@@ -92,7 +92,6 @@ impl<B: TurnBackend> ActionExecutor<B> {
         self.validate_lifecycle_binding(binding, channel)?;
         self.archive_preflight(channel, reference, &thread.id, generation, own)
             .await?;
-        self.load_archive_target(&thread.id, generation).await?;
         let children = super::archive_scope::descendants(server, &thread.id, generation).await?;
         let frozen_children = children.clone();
         cdr_app_server::ResidentAppServer::with_archive_stop_scope(
@@ -104,7 +103,6 @@ impl<B: TurnBackend> ActionExecutor<B> {
                     child_guards.push(self.control_lock(child).await?);
                     self.archive_preflight(0, Some(child), child, generation, own)
                         .await?;
-                    self.load_archive_target(child, generation).await?;
                 }
                 if super::archive_scope::descendants(server, &thread.id, generation).await?
                     != children
@@ -123,7 +121,7 @@ impl<B: TurnBackend> ActionExecutor<B> {
                 let mut scope = children;
                 scope.insert(thread.id.clone());
                 // This transaction commits before awaiting the app-server writer. Late
-                // ingress is saved held; earlier ingress prevents this reservation.
+                // ingress is saved held; existing inputs are preserved without blocking it.
                 let reservation = cdr_store::archive_fence::reserve(&self.mirror_db, &scope, own)?;
                 *archive_sent = true;
                 if let Err(error) = server
@@ -157,50 +155,13 @@ impl<B: TurnBackend> ActionExecutor<B> {
         .await?
     }
 
-    async fn load_archive_target(&self, thread: &str, generation: u64) -> Result<(), ActionError> {
-        let server = self.server.as_ref().ok_or(ActionError::MissingAppServer)?;
-        let resumed = server
-            .execute(
-                resume_request(thread, self.app_server_resume_timeout),
-                Some(generation),
-            )
-            .await
-            .map_err(|error| original_owner_error("archive", thread, error))?;
-        if resumed
-            .pointer("/thread/id")
-            .and_then(serde_json::Value::as_str)
-            != Some(thread)
-        {
-            return Err(ActionError::Invalid(
-                "archive resume returned a missing or different thread identity".into(),
-            ));
-        }
-        let read = server
-            .execute(read_thread(thread, false), Some(generation))
-            .await?;
-        if read
-            .pointer("/thread/id")
-            .and_then(serde_json::Value::as_str)
-            != Some(thread)
-            || read
-                .pointer("/thread/status/type")
-                .and_then(serde_json::Value::as_str)
-                != Some("idle")
-        {
-            return Err(ActionError::Invalid(format!(
-                "archive requires confirmed idle status for {thread}; no archive was sent"
-            )));
-        }
-        Ok(())
-    }
-
     async fn archive_preflight(
         &self,
         channel: u64,
         reference: Option<&str>,
         thread: &str,
         generation: u64,
-        own: Option<&str>,
+        _own: Option<&str>,
     ) -> Result<(), ActionError> {
         let server = self.server.as_ref().ok_or(ActionError::MissingAppServer)?;
         let lifecycle = server.lifecycle_snapshot().await;
@@ -218,27 +179,8 @@ impl<B: TurnBackend> ActionExecutor<B> {
                 "archive room target changed; no archive was sent".into(),
             ));
         }
-        if server.active_turn_id(thread).await?.is_some() {
-            return Err(ActionError::Invalid(
-                "refusing to archive a thread with an active turn".into(),
-            ));
-        }
-        if let Some(request) =
-            cdr_store::ingress::unfinished_for_archive(&self.mirror_db, thread, own)?
-        {
-            return Err(ActionError::Invalid(format!(
-                "refusing to archive while request {request} has unfinished ingress; request is preserved, no archive was sent"
-            )));
-        }
-        if cdr_store::queue::list(&self.mirror_db)?
-            .iter()
-            .any(|job| job.target_thread_id == thread)
-            || cdr_store::prompt_intake::list_prompt_intakes(&self.mirror_db)?
-                .iter()
-                .any(|job| job.target_thread_id == thread)
-        {
-            return Err(ActionError::Invalid("refusing to archive a thread with queued, running, or intake work; requests are preserved".into()));
-        }
+        // Explicit archive takes precedence over active turns and saved bot work.
+        // Native thread/archive owns shutdown and writer-lock enforcement.
         if cdr_codex_state::CodexThreadStore::open(&self.state_db)?
             .load_thread(thread, false)?
             .is_none()

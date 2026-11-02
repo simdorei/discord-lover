@@ -11,6 +11,11 @@ pub fn begin(path: &Path, scope: &Scope<'_>, value: &Value, payload: &Value) -> 
     let claim: Authority = serde_json::from_value(value.clone())?;
     let mut db = super::super::existing(path)?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if crate::archived_cleanup::record_retired_in(&tx, "codex_turn_queue", &claim.job)?
+        || crate::archived_cleanup::blocked_in(&tx, None, Some(&claim.thread))?
+    {
+        return Err(refused());
+    }
     authority::validate(&tx, scope, &claim, "")?;
     // Only proved terminal history may be pruned; never expire uncertain sends.
     tx.execute(
@@ -19,9 +24,11 @@ pub fn begin(path: &Path, scope: &Scope<'_>, value: &Value, payload: &Value) -> 
         ORDER BY updated_at DESC,request_key DESC LIMIT -1 OFFSET 256)",
         [],
     )?;
-    let count: i64 = tx.query_row("SELECT count(*) FROM cdr_server_responses", [], |row| {
-        row.get(0)
-    })?;
+    let count: i64 = tx.query_row(
+        "SELECT count(*) FROM cdr_live_cdr_server_responses",
+        [],
+        |row| row.get(0),
+    )?;
     if count >= 1024 {
         return Err(refused());
     }

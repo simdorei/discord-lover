@@ -3,7 +3,7 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use twilight_model::channel::ChannelType;
 
-mod archived_rejections;
+mod archived_retirement;
 mod channels;
 mod cleanup;
 mod container_creation;
@@ -21,6 +21,7 @@ mod rollout;
 mod scope;
 mod sync;
 pub use http::DiscordMirrorTransport;
+tokio::task_local! { static SYNC_ORIGIN: serde_json::Value; }
 
 pub type MirrorFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, MirrorSyncError>> + Send + 'a>>;
@@ -152,6 +153,8 @@ impl MirrorSynchronizer {
 
 #[derive(Debug, Default, PartialEq)]
 pub struct MirrorSyncResult {
+    pub skipped: Vec<String>,
+    pub records_preserved: std::collections::BTreeMap<String, i64>,
     pub projects: usize,
     pub threads: usize,
     pub archived: usize,
@@ -165,7 +168,12 @@ impl std::fmt::Display for MirrorSyncResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Mirror sync complete.\nprojects: {}\nthreads: {}\nstale_threads_deleted: {}\nunavailable: {}\norphan_threads_deleted: {}\nprojects_deleted: {}\ncleanup: {}",
+            "Mirror sync {}.\nprojects: {}\nthreads: {}\nstale_threads_deleted: {}\nunavailable: {}\norphan_threads_deleted: {}\nprojects_deleted: {}\ncleanup: {}",
+            if self.skipped.is_empty() {
+                "complete"
+            } else {
+                "partial"
+            },
             self.projects,
             self.threads,
             self.archived,
@@ -175,9 +183,20 @@ impl std::fmt::Display for MirrorSyncResult {
             if self.limited {
                 "limited sync; existing mappings retained"
             } else {
-                "obsolete mirror rooms deleted; current mappings protected"
+                "full sync; skipped rooms preserved"
             }
-        )
+        )?;
+        if !self.records_preserved.is_empty() {
+            write!(
+                f,
+                "\nrecords preserved (no automatic replay): {}",
+                self.records_preserved.values().sum::<i64>()
+            )?;
+        }
+        for skipped in &self.skipped {
+            write!(f, "\nskipped: {skipped}")?;
+        }
+        Ok(())
     }
 }
 

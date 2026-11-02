@@ -27,6 +27,11 @@ impl MirrorSynchronizer {
         prompt: &str,
         cwd: Option<&str>,
     ) -> Result<u64, MirrorSyncError> {
+        let _origin_effect = cdr_store::archived_cleanup::effects::admit(
+            &self.mirror_db,
+            Some(db_id(origin)?),
+            None,
+        )?;
         let origin = self.remote.channel(origin).await?.ok_or_else(|| {
             MirrorSyncError::Invalid("new-thread origin channel is unavailable".into())
         })?;

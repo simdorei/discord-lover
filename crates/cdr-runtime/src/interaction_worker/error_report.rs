@@ -56,7 +56,9 @@ pub(super) async fn report_interaction_error(
         }
         return;
     }
-    let api = DiscordHttp::new(http, work.application_id);
+    let api = DiscordHttp::new(http, work.application_id)
+        .with_store(&work.custody_database, Some(work.channel_id.get()))
+        .with_ingress(&work.custody_ingress_id);
     let delivery =
         deliver_interaction_text_idempotent(&api, work, &error_text, INTERACTION_ERROR_DOMAIN)
             .await;

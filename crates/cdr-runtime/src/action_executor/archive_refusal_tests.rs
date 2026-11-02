@@ -129,8 +129,8 @@ async fn check(scenario: &str, pending: bool, expected_archive_calls: usize) {
 }
 
 #[tokio::test]
-async fn archive_refusal_before_dispatch_does_not_hold_later_input_after_restart() {
-    check("normal", true, 0).await;
+async fn pending_work_does_not_prevent_archive_but_unknown_outcome_stays_held() {
+    check("stall_archive", true, 1).await;
 }
 
 #[tokio::test]

@@ -15,7 +15,7 @@ mod open_profile;
 #[cfg(test)]
 mod snapshot_tests;
 
-pub const LATEST_STORE_SCHEMA_VERSION: i64 = 2;
+pub const LATEST_STORE_SCHEMA_VERSION: i64 = 3;
 pub const STORE_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const BACKUP_DIRECTORY: &str = ".codex-discord-backups";
 
@@ -135,6 +135,7 @@ fn migrate(connection: &Connection, version: i64) -> Result<()> {
             }
         }
         2 => migrate_queue_generation(connection)?,
+        3 => crate::archived_cleanup::migrate_schema(connection)?,
         _ => {
             return Err(StoreError::UnsupportedVersion {
                 found: version,
@@ -184,7 +185,9 @@ fn migrate_rust_extensions(connection: &Connection) -> Result<()> {
     crate::async_resolution::abandonment::migrate_schema(connection)?;
     crate::async_resolution::admission_order::migrate_schema(connection)?;
     crate::mutation_attempt::response::migrate_schema(connection)?;
-    crate::reserve_retirement::migrate_schema(connection)
+    crate::reserve_retirement::migrate_schema(connection)?;
+    crate::archived_cleanup::migrate_schema(connection)?;
+    crate::archived_cleanup::install_records(connection)
 }
 
 fn rust_extensions_current(connection: &Connection) -> Result<bool> {
@@ -244,7 +247,9 @@ fn rust_extensions_current(connection: &Connection) -> Result<bool> {
         && crate::async_resolution::abandonment::schema_current(connection)?
         && crate::async_resolution::admission_order::schema_current(connection)?
         && crate::mutation_attempt::response::schema_current(connection)?
-        && crate::reserve_retirement::schema_current(connection)?)
+        && crate::reserve_retirement::schema_current(connection)?
+        && crate::archived_cleanup::schema_current(connection)?
+        && crate::archived_cleanup::records_current(connection)?)
 }
 
 fn migrate_goal_waiting(connection: &Connection) -> Result<()> {

@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+cdr-store = { path = "../cdr-store" }
 hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true

@@ -15,7 +15,7 @@ pub struct CheckpointUpdate<'a> {
 /// Bounded, durable round-robin discovery does not depend on a surviving queue row.
 pub fn pending(path: &Path, limit: usize) -> Result<Vec<NewReply>> {
     let connection = open_initialized(path)?;
-    let keys = connection.prepare("SELECT job_id FROM codex_new_first_replies
+    let keys = connection.prepare("SELECT job_id FROM cdr_live_codex_new_first_replies
         WHERE turn_id IS NOT NULL AND (state<>'verified' OR confirmation_delivered=0 OR warning_due=1)
         ORDER BY checked_at,job_id LIMIT ?")?
         .query_map([i64::try_from(limit.min(32)).unwrap_or(32)],|row|row.get::<_,String>(0))?

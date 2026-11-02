@@ -50,47 +50,47 @@ impl Source {
             Self::Observed => {
                 "SELECT 0 stamp,rowid ordinal,'' sort_id,thread_id id,
                 thread_id target,turn_id turn,0 channel,length(CAST(payload AS BLOB)) bytes
-                FROM codex_observed_completions"
+                FROM cdr_live_codex_observed_completions"
             }
             Self::Queue => {
                 "SELECT DISTINCT 0 stamp,0 ordinal,target_thread_id sort_id,
                 target_thread_id id,target_thread_id target,'' turn,0 channel,0 bytes
-                FROM codex_turn_queue WHERE state<>'quarantined'"
+                FROM cdr_live_codex_turn_queue WHERE state<>'quarantined'"
             }
             Self::AsyncOrphan => {
                 "SELECT DISTINCT 0 stamp,0 ordinal,o.thread_id sort_id,
                 o.thread_id id,o.thread_id target,'' turn,0 channel,0 bytes
-                FROM cdr_async_execution_obligations o WHERE o.execution_state='unresolved'
-                AND NOT EXISTS(SELECT 1 FROM codex_turn_queue q WHERE q.job_id=o.origin_job_id)
-                AND NOT EXISTS(SELECT 1 FROM codex_turn_queue q
+                FROM cdr_live_cdr_async_execution_obligations o WHERE o.execution_state='unresolved'
+                AND NOT EXISTS(SELECT 1 FROM cdr_live_codex_turn_queue q WHERE q.job_id=o.origin_job_id)
+                AND NOT EXISTS(SELECT 1 FROM cdr_live_codex_turn_queue q
                     WHERE q.target_thread_id=o.thread_id AND q.state<>'pending')"
             }
             Self::Commentary => {
                 "SELECT 0 stamp,sequence ordinal,'' sort_id,
                 CAST(sequence AS TEXT) id,target_thread_id target,turn_id turn,channel_id channel,
-                length(CAST(text AS BLOB)) bytes,job_id job FROM codex_commentary_outbox"
+                length(CAST(text AS BLOB)) bytes,job_id job FROM cdr_live_codex_commentary_outbox"
             }
             Self::Goal => {
                 "SELECT 0 stamp,rowid ordinal,'' sort_id,thread id,
                 thread target,turn,channel,length(CAST(content AS BLOB)) bytes
-                FROM codex_goal_progress"
+                FROM cdr_live_codex_goal_progress"
             }
             Self::StartFailure => {
                 "SELECT created_at stamp,0 ordinal,job_id sort_id,job_id id,
                 target_thread_id target,'' turn,channel_id channel,
-                length(CAST(content AS BLOB)) bytes FROM codex_reserve_start_notices"
+                length(CAST(content AS BLOB)) bytes FROM cdr_live_codex_reserve_start_notices"
             }
             Self::Question => {
                 "SELECT created_at stamp,CAST(json_extract(body,'$.index') AS INTEGER) ordinal,
                 id sort_id,id,thread_id target,turn_id turn,channel_id channel,
-                length(CAST(body AS BLOB)) bytes FROM cdr_async_questions
+                length(CAST(body AS BLOB)) bytes FROM cdr_live_cdr_async_questions
                 WHERE state='observed' AND runtime_id=(SELECT runtime FROM scope)
                 AND generation=(SELECT generation FROM scope)"
             }
             Self::Final => {
                 "SELECT created_at stamp,0 ordinal,delivery_id sort_id,delivery_id id,
                 target_thread_id target,turn_id turn,channel_id channel,
-                length(CAST(content AS BLOB)) bytes,job_id job FROM codex_delivery_outbox"
+                length(CAST(content AS BLOB)) bytes,job_id job FROM cdr_live_codex_delivery_outbox"
             }
         }
     }

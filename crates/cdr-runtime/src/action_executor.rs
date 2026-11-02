@@ -228,7 +228,7 @@ impl<B: TurnBackend> ActionExecutor<B> {
                 return self.inspect_mirror(channel_id, limit, list).await;
             }
             CommandAction::BridgeSync { limit } => {
-                return self.bridge_sync(channel_id, limit).await;
+                return self.bridge_sync(context, limit).await;
             }
             CommandAction::QaButtons => immediate(
                 "Rust button QA contracts are enabled: busy, approval, input, one-use claim, and retry release.",

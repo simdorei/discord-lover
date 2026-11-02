@@ -37,27 +37,25 @@ async fn mc_1_public_handoff_final_delivery_then_archive_allows_sync_and_keeps_h
 }
 
 #[tokio::test]
-async fn mc_4_real_precheck_preserves_pending_request_and_actual_blocked_room() {
+async fn mc_4_native_archive_retires_room_and_preserves_queued_original() {
     let temp = tempfile::tempdir().unwrap();
     let (sync, remote) = fixture(&temp);
     let db = temp.path().join("mirror.sqlite");
     owned_prompt::queued_for(&db, "thread-old", "C:/repos/old", 21);
-    let error = sync.sync(99, None).await.unwrap_err();
-    assert!(matches!(
-        error,
-        MirrorSyncError::CleanupProtected {
-            channel: 31,
-            reason: "queued requests"
-        }
-    ));
-    assert!(remote.0.lock().unwrap().channels.contains_key(&31));
-    assert!(thread_channels(&db, "thread-old").unwrap().is_some());
-    assert_eq!(cdr_store::room_cleanup::phase(&db, 31).unwrap(), None);
-    assert_eq!(cdr_store::queue::list(&db).unwrap().len(), 1);
+    let result = sync.sync(99, None).await.unwrap();
+    assert_eq!(result.archived, 1);
+    assert!(!remote.0.lock().unwrap().channels.contains_key(&31));
+    assert!(thread_channels(&db, "thread-old").unwrap().is_none());
+    assert!(cdr_store::queue::list(&db).unwrap().is_empty());
+    let count: i64 = Connection::open(&db)
+        .unwrap()
+        .query_row("SELECT count(*) FROM codex_turn_queue", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(count, 1);
 }
 
 #[tokio::test]
-async fn mc_5_missing_room_race_is_typed_and_keeps_partial_sync_changes() {
+async fn mc_5_missing_archived_room_race_retires_mapping_and_keeps_late_original() {
     let temp = tempfile::tempdir().unwrap();
     let (sync, remote) = fixture(&temp);
     let db = temp.path().join("mirror.sqlite");
@@ -70,7 +68,7 @@ async fn mc_5_missing_room_race_is_typed_and_keeps_partial_sync_changes() {
         .await
         .unwrap();
     // A different client removes the room after read-only precheck, while a
-    // request arrives. The final transaction must not retire its live mapping.
+    // request arrives. Archive retirement keeps the original request without replay.
     remote.0.lock().unwrap().channels.remove(&31);
     let mut pending = owned_prompt::request();
     pending.ingress_id = "message:502".into();
@@ -79,21 +77,14 @@ async fn mc_5_missing_room_race_is_typed_and_keeps_partial_sync_changes() {
     pending.target_thread_id = Some("thread-old".into());
     cdr_store::ingress::admit(&db, &pending).unwrap();
     release.notify_one();
-    let error = worker.await.unwrap().unwrap_err();
-    assert!(matches!(
-        error,
-        MirrorSyncError::CleanupProtected {
-            channel: 31,
-            reason: "ingress"
-        }
-    ));
-    assert!(error.to_string().contains("earlier sync changes"));
+    let result = worker.await.unwrap().unwrap();
+    assert_eq!(result.archived, 1);
     assert!(!remote.0.lock().unwrap().channels.contains_key(&31));
     assert_eq!(
         remote.0.lock().unwrap().channels[&30].name,
         "앱에서 정한 이름"
     );
-    assert!(thread_channels(&db, "thread-old").unwrap().is_some());
+    assert!(thread_channels(&db, "thread-old").unwrap().is_none());
     assert_eq!(cdr_store::room_cleanup::phase(&db, 31).unwrap(), None);
     assert_eq!(
         cdr_store::ingress::get(&db, "message:502")

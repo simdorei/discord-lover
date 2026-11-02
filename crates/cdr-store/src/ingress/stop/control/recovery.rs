@@ -22,7 +22,7 @@ pub fn recovery_after(path: &Path, after: i64) -> Result<Vec<(i64, StopControl)>
     let db = existing(path)?;
     let rows = db
         .prepare(
-            "SELECT sequence,record_json FROM cdr_stop_controls c
+            "SELECT sequence,record_json FROM cdr_live_cdr_stop_controls c
          WHERE sequence>? AND json_extract(record_json,'$.can_settle')=1 AND
          (phase<>'settled' OR EXISTS(SELECT 1 FROM json_each(record_json,'$.jobs') j
           JOIN codex_turn_queue q ON q.job_id=json_extract(j.value,'$.job_id')))

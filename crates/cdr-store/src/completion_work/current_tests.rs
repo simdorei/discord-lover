@@ -16,6 +16,8 @@ fn channel_current_preserves_heads_and_reduces_cross_channel_query_work() {
         CREATE TABLE discord_ingress_journal(owner_kind TEXT,owner_id TEXT,kind TEXT,confirmation_delivered INTEGER,created_at REAL,ingress_id TEXT);
         CREATE TABLE cdr_final_recovery(delivery_id TEXT);
         CREATE TABLE codex_commentary_outbox(job_id TEXT,target_thread_id TEXT,turn_id TEXT,channel_id INTEGER);").unwrap();
+    crate::archived_cleanup::migrate_schema(&db).unwrap();
+    crate::archived_cleanup::install_records(&db).unwrap();
     for n in 0..130 {
         let id = format!("job-{n:03}");
         db.execute(

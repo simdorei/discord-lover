@@ -167,7 +167,7 @@ async fn attempted_and_verified_archive_fences_survive_read_only_terminal_settle
             let actual:(String,String)=cdr_store::schema::open_initialized(&f.db).unwrap()
                 .query_row("SELECT operation_id,phase FROM codex_archive_fences WHERE target_thread_id='thread-b'",
                     [],|r|Ok((r.get(0)?,r.get(1)?))).unwrap();
-            assert_eq!(actual, (operation.clone(), phase.to_owned()));
+            assert_eq!(actual, (operation.operation_id.clone(), phase.to_owned()));
             assert_no_mutation(&f, &[]);
         }
         assert!(

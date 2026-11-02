@@ -15,7 +15,7 @@ fn legacy_store(path: &Path) -> Connection {
 }
 
 #[test]
-fn legacy_v2_reader_and_writer_preserve_rust_extensions_without_conversion() {
+fn legacy_v2_data_survives_upgrade_that_refuses_older_runtime_version() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("compatibility.sqlite");
     let conn = open_initialized(&path).unwrap();
@@ -40,14 +40,14 @@ fn legacy_v2_reader_and_writer_preserve_rust_extensions_without_conversion() {
     )
     .unwrap();
 
-    // The legacy v2 initializer returns without DDL for user_version=2.
-    // Exercise its frozen query/write contract directly, never Rust's initializer.
+    // Version 3 is deliberately above the old runtime's supported version.
+    // Raw inspection does not represent permission to run the old initializer.
     let legacy = Connection::open(&path).unwrap();
     assert_eq!(
         legacy
             .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
             .unwrap(),
-        2
+        cdr_store::schema::LATEST_STORE_SCHEMA_VERSION
     );
     legacy
         .execute(
@@ -147,7 +147,7 @@ fn legacy_mark_only_row_keeps_exact_schema_and_blocks_rust_reclaim() {
         connection
             .pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
             .unwrap(),
-        2
+        cdr_store::schema::LATEST_STORE_SCHEMA_VERSION
     );
     let mut statement = connection
         .prepare("PRAGMA table_info(discord_processed_messages)")
@@ -196,7 +196,7 @@ fn empty_legacy_v2_store_can_be_reopened_and_extended_idempotently() {
         assert_eq!(
             conn.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
                 .unwrap(),
-            2
+            cdr_store::schema::LATEST_STORE_SCHEMA_VERSION
         );
         assert_eq!(conn.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='discord_processed_messages'",[],|row|row.get::<_,i64>(0)).unwrap(),1);
         assert_eq!(

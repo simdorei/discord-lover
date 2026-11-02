@@ -1,6 +1,7 @@
 //! Durable `SQLite` state shared by the Rust Discord runtime.
 
 pub mod archive_fence;
+pub mod archived_cleanup;
 pub mod async_question;
 pub mod async_resolution;
 pub mod backup;

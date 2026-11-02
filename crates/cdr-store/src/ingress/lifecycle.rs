@@ -32,6 +32,15 @@ pub fn begin_execution(
     let mut db = crate::schema::open_initialized(path)?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     if let Some(record) = get_in(&tx, key)?
+        && (crate::archived_cleanup::blocked_in(
+            &tx,
+            Some(record.channel_id),
+            record.target_thread_id.as_deref(),
+        )? || crate::archived_cleanup::record_retired_in(&tx, "discord_ingress_journal", key)?)
+    {
+        return Ok(false);
+    }
+    if let Some(record) = get_in(&tx, key)?
         && let Some(original) = super::frozen_slash_target(&record)
         && (target.is_some_and(|value| value != original)
             || crate::mapping::mirrored_thread_id_in(&tx, Some(record.channel_id))?.as_deref()
@@ -59,6 +68,14 @@ pub fn begin_thread_start(path: &Path, key: &str, generation: i64, now: f64) -> 
     let mut db = crate::schema::open_initialized(path)?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     if let Some(record) = get_in(&tx, key)? {
+        if crate::archived_cleanup::blocked_in(
+            &tx,
+            Some(record.channel_id),
+            record.target_thread_id.as_deref(),
+        )? || crate::archived_cleanup::record_retired_in(&tx, "discord_ingress_journal", key)?
+        {
+            return Ok(false);
+        }
         super::new_execution_prompt(&record)?.ok_or_else(|| {
             StoreError::Integrity("thread/start has no original New input".into())
         })?;

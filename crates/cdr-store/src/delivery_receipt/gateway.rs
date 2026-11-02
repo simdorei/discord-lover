@@ -8,7 +8,9 @@ use crate::{Result, schema::open_initialized};
 
 pub fn confirmed_message(path: &Path, key: &str, hash: &str) -> Result<Option<String>> {
     Ok(open_initialized(path)?.query_row(
-        "SELECT message_id FROM codex_delivery_receipts WHERE receipt_key=? AND content_hash=? AND message_id IS NOT NULL",
+        "SELECT COALESCE(r.message_id,c.message_id) FROM codex_delivery_receipts r
+         LEFT JOIN cdr_archived_room_receipt_confirmations c ON c.receipt_key=r.receipt_key AND c.content_hash=r.content_hash
+         WHERE r.receipt_key=? AND r.content_hash=? AND COALESCE(r.message_id,c.message_id) IS NOT NULL",
         params![key, hash], |row| row.get(0),
     ).optional()?)
 }

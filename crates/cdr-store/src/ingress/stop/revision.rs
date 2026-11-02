@@ -11,11 +11,41 @@ pub fn validate_request_in(
     target: Option<&str>,
     origin: Option<&Value>,
 ) -> Result<()> {
+    if let Some(origin) = origin.filter(|value| value.get("ingressId").is_some()) {
+        return validate_ingress_origin_in(db, method, target, origin);
+    }
     if let Some(origin) = origin.filter(|value| value.get("archiveTargets").is_some()) {
         archive::validate_in(db, method, target, origin)
     } else {
         validate_in(db, target, origin)
     }
+}
+
+// This runs inside the actual writer's mutation transaction, both before and
+// after its intent INSERT. Restoring a room never revives an old admission.
+fn validate_ingress_origin_in(
+    db: &Connection,
+    method: &str,
+    target: Option<&str>,
+    envelope: &Value,
+) -> Result<()> {
+    if method == "thread/archive" || envelope.as_object().is_none_or(|value| value.len() != 2) {
+        return Err(refused());
+    }
+    let key = envelope["ingressId"].as_str().ok_or_else(refused)?;
+    let record = crate::ingress::read::get_in(db, key)?.ok_or_else(refused)?;
+    let original = origin_for_ingress(&record)?;
+    if record.target_thread_id.as_deref() != target
+        || envelope.get("stopOrigin") != Some(original.as_ref().unwrap_or(&Value::Null))
+    {
+        return Err(refused());
+    }
+    if crate::archived_cleanup::record_retired_in(db, "discord_ingress_journal", key)? {
+        return Err(StoreError::Integrity(
+            "original ingress was retired by archived cleanup; no dispatch".into(),
+        ));
+    }
+    validate_in(db, target, original.as_ref())
 }
 use crate::{Result, StoreError};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};

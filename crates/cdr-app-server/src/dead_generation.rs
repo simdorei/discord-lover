@@ -7,6 +7,16 @@ use crate::{RequestId, ServerRequestOccurrence};
 /// Implementations must commit their durable fence before returning success and
 /// must not call resident APIs (which can acquire the same replacement lock).
 pub trait DeadGenerationFence: Send + Sync {
+    /// A short-lived effect permit acquired at the actual writer and retained
+    /// through outcome recording. It never covers the lifetime of a native turn.
+    fn admit_effect(
+        &self,
+        _method: &str,
+        _params: &Value,
+    ) -> Result<Option<Box<dyn Send + Sync>>, crate::AppServerError> {
+        Ok(None)
+    }
+
     fn persist(&self, work: &DeadGenerationWork) -> Result<(), crate::AppServerError>;
 
     /// Return true only after committing this exact wire occurrence before bytes.

@@ -115,6 +115,10 @@ impl ResidentAppServer {
         if let Some(check) = &check {
             check()?;
         }
+        if method == "thread/archive" {
+            // Explicit native archive must not resume or wait for idle bookkeeping.
+            return Ok(Prepared::Ready(None));
+        }
         if matches!(
             method,
             "thread/read"

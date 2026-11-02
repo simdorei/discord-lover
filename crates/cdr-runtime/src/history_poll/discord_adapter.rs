@@ -145,7 +145,8 @@ impl<'a, B: TurnBackend> DiscordHistoryCycleIo<'a, B> {
         bot_user_id: Option<u64>,
         observed_at: SystemTime,
     ) -> Self {
-        let api = DiscordHttp::new(Arc::clone(&context.http), context.application_id);
+        let api = DiscordHttp::new(Arc::clone(&context.http), context.application_id)
+            .with_store(context.executor.mirror_db(), None);
         let mut adapter = DiscordHistoryMessageAdapter::new(
             context.config,
             context.executor.mirror_db(),

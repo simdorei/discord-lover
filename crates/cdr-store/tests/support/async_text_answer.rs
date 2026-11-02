@@ -1,3 +1,5 @@
+#[path = "legacy_schema.rs"]
+mod legacy_schema;
 use super::{aq, claim, fixture, open_initialized};
 
 #[test]
@@ -54,6 +56,7 @@ fn migration_preserves_an_existing_choice_seal_without_text_capability() {
             |r| r.get(0),
         )
         .unwrap();
+    legacy_schema::remove_retirement_guards(&conn);
     conn.execute_batch("DROP TRIGGER cdr_async_obligation_question; DROP TRIGGER cdr_async_obligation_queue_delete; ALTER TABLE cdr_async_questions DROP COLUMN answer_text;").unwrap();
     drop(conn);
     let conn = open_initialized(&db).unwrap();

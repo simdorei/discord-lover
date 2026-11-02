@@ -84,6 +84,10 @@ pub(super) fn run() -> Result {
             "test/pauseReads" | "test/blocked" => json!({}),
             "account/rateLimits/read" => quota(&mode),
             "model/list" => {
+                if mode == "catalog-pause" {
+                    std::fs::write(root.join("catalog-ready"), "ready")?;
+                    wait_file(&root.join("catalog-release"), 40, true)?;
+                }
                 let mut catalog = json!({"data":[
                     {"model":"model-a","displayName":"Model A","supportedReasoningEfforts":[{"reasoningEffort":"high"},{"reasoningEffort":"low"}]},
                     {"model":"model-b","displayName":"Model B","supportedReasoningEfforts":[{"reasoningEffort":"medium"}]}]});

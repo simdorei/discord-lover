@@ -22,7 +22,7 @@ pub fn recover_prior_runtime(path: &Path, runtime_id: &str, now: f64) -> Result<
     transaction.execute(
         "UPDATE codex_new_first_replies SET ack_recovery_allowed=1
         WHERE confirmation_delivered=0 AND ingress_id IN
-        (SELECT ingress_id FROM discord_ingress_journal WHERE runtime_id IS NOT ?)",
+        (SELECT ingress_id FROM cdr_live_discord_ingress_journal WHERE runtime_id IS NOT ?)",
         [runtime_id],
     )?;
     for record in &records {
@@ -66,7 +66,14 @@ fn hold_in(
         .ok_or_else(|| StoreError::Integrity(format!("missing ingress hold: {key}")))?;
     // A closed archived mirror retains exact non-dispatch evidence, not a
     // fictional confirmation. Do not stage a new POST into that closed room.
-    if crate::room_cleanup::archived_rejections::preserves(connection, key)? {
+    if crate::archived_cleanup::record_retired_in(connection, "discord_ingress_journal", key)?
+        || crate::archived_cleanup::blocked_in(
+            connection,
+            Some(record.channel_id),
+            record.target_thread_id.as_deref(),
+        )?
+        || crate::room_cleanup::archived_rejections::preserves(connection, key)?
+    {
         return Ok(());
     }
     // A permanent ownership receipt survives removal of its transient queue row.

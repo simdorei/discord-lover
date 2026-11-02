@@ -1,3 +1,5 @@
+#[path = "legacy_schema.rs"]
+mod legacy_schema;
 use super::*;
 use cdr_store::reserve_policy as reserve;
 
@@ -96,9 +98,9 @@ fn legacy_pending_dispatch_is_preserved_without_manufacturing_a_preparation() {
     let (_dir, db, id) = fixture();
     queue::complete(&db, "origin").unwrap();
     aq::begin_dispatch(&db, &claim(&id, aq::DispatchMode::Start)).unwrap();
-    open_initialized(&db)
-        .unwrap()
-        .execute_batch(
+    let legacy = open_initialized(&db).unwrap();
+    legacy_schema::remove_retirement_guards(&legacy);
+    legacy.execute_batch(
             // Reconstruct the actual pre-obligation schema in this temporary DB.
             // Modern dependent triggers cannot exist in a pre-seal fixture.
             "DROP TRIGGER cdr_async_obligation_question;

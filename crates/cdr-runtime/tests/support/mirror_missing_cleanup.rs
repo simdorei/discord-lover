@@ -22,7 +22,7 @@ async fn shared_room_preserves_both_mappings_and_reports_conflict_without_pendin
         )
         .unwrap();
     upsert_thread(&db, "thread-a", "C:/repos/alpha", "active", 21, 31, 1.0).unwrap();
-    let error = sync.sync(99, None).await.unwrap_err().to_string();
+    let error = sync.sync(99, None).await.unwrap().to_string();
     assert!(error.contains("shared Discord room 31"), "{error}");
     assert_eq!(thread_channels(&db, "thread-old").unwrap(), Some((21, 31)));
     assert_eq!(thread_channels(&db, "thread-a").unwrap(), Some((21, 31)));
@@ -48,7 +48,7 @@ async fn shared_room_preserves_both_mappings_and_reports_conflict_without_pendin
         .unwrap();
     assert_eq!(saved.payload, incoming.payload);
     assert_eq!(saved.state, "staged");
-    assert!(sync.sync(99, None).await.is_err());
+    assert!(!sync.sync(99, None).await.unwrap().skipped.is_empty());
     assert_eq!(thread_channels(&db, "thread-old").unwrap(), Some((21, 31)));
     assert_eq!(thread_channels(&db, "thread-a").unwrap(), Some((21, 31)));
     assert!(remote.0.lock().unwrap().channels.contains_key(&31));
@@ -130,7 +130,7 @@ async fn absent_thread_with_pending_request_is_preserved() {
         },
     )
     .unwrap();
-    let error = sync.sync(99, None).await.unwrap_err().to_string();
+    let error = sync.sync(99, None).await.unwrap().to_string();
     assert!(error.contains("queued requests"), "{error}");
     assert!(remote.0.lock().unwrap().channels.contains_key(&31));
     assert!(

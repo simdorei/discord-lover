@@ -242,7 +242,8 @@ pub(super) async fn handle_message_create(
         false
     };
     let message_context = context.message_context(application_id);
-    let api = DiscordHttp::new(Arc::clone(&context.http), application_id);
+    let api = DiscordHttp::new(Arc::clone(&context.http), application_id)
+        .with_store(context.executor.mirror_db(), Some(message.channel_id.get()));
     dispatch_message_create(
         report_target,
         || {

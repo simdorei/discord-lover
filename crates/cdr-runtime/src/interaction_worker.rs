@@ -106,7 +106,9 @@ async fn process_interaction_work<B: TurnBackend>(
                     return cleanup_refusal::deliver(
                         work,
                         custody,
-                        &DiscordHttp::new(http, work.application_id),
+                        &DiscordHttp::new(http, work.application_id)
+                            .with_store(&work.custody_database, Some(work.channel_id.get()))
+                            .with_ingress(&work.custody_ingress_id),
                         &refusal,
                     )
                     .await;

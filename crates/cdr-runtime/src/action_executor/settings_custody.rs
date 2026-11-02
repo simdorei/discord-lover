@@ -26,6 +26,7 @@ impl<B: TurnBackend> ActionExecutor<B> {
                     | CommandAction::Recover { .. }
                     | CommandAction::Repair { .. }
             );
+        let archive = matches!(action, CommandAction::Archive { .. });
         let operation = Box::pin(self.execute_admitted_action(action, context, key));
         if !bound {
             return operation.await;
@@ -33,6 +34,13 @@ impl<B: TurnBackend> ActionExecutor<B> {
         let record = cdr_store::ingress::get(&self.mirror_db, key)?
             .ok_or_else(|| ActionError::Invalid("original admission record is missing".into()))?;
         let frozen = cdr_store::ingress::stop::revision::origin_for_ingress(&record)?;
+        // Carry the original request through every await and the final writer.
+        // Archive retains its independent, subtree-bound reservation contract.
+        let frozen = if archive {
+            frozen
+        } else {
+            Some(serde_json::json!({"ingressId":key,"stopOrigin":frozen}))
+        };
         cdr_app_server::ResidentAppServer::with_stop_origin(frozen, operation).await
     }
 

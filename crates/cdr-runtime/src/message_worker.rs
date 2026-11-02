@@ -220,7 +220,8 @@ async fn handle_pending_reply<B: TurnBackend>(
     )?;
     deliver_reply_text(
         context.executor.mirror_db(),
-        &DiscordHttp::new(Arc::clone(&context.http), context.application_id),
+        &DiscordHttp::new(Arc::clone(&context.http), context.application_id)
+            .with_store(context.executor.mirror_db(), Some(message.channel_id.get())),
         message.channel_id,
         message.id,
         MessageReplyKind::PendingConfirmation,

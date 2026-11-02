@@ -280,10 +280,11 @@ async fn mirror_deadline_deleted_room_reply_stall_keeps_fence_without_redelete()
     assert!(error.contains("phase=operation"), "{error}");
     let path = temp.path().join("mirror.sqlite");
     assert_eq!(
-        cdr_store::room_cleanup::phase(&path, 31)
+        cdr_store::archived_cleanup::get(&path, 31)
             .unwrap()
+            .map(|i| i.phase)
             .as_deref(),
-        Some("deleting")
+        Some("delete_attempted")
     );
     assert_eq!(
         thread_channels(&path, "thread-old").unwrap(),
@@ -297,16 +298,25 @@ async fn mirror_deadline_deleted_room_reply_stall_keeps_fence_without_redelete()
         remote.clone(),
         Some(1),
     );
-    assert!(cold.sync(99, None).await.is_err());
+    // A cold ownership reader performs real OS I/O, outside virtual time.
+    tokio::time::resume();
+    cdr_runtime::agy::ownership::AgyOwnership::for_root(temp.path(), 1)
+        .ensure_loaded(&path)
+        .await
+        .unwrap();
+    tokio::time::pause();
+    let result = cold.sync(99, None).await.unwrap();
+    assert_eq!(result.archived, 1, "{result:?}");
     assert_eq!(
         remote.0.lock().unwrap().deletes,
         1,
         "unknown deletion must not be dispatched again"
     );
     assert_eq!(
-        cdr_store::room_cleanup::phase(&path, 31)
+        cdr_store::archived_cleanup::get(&path, 31)
             .unwrap()
+            .map(|i| i.phase)
             .as_deref(),
-        Some("deleting")
+        Some("mapping_retired")
     );
 }

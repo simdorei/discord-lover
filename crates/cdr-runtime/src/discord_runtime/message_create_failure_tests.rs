@@ -118,7 +118,7 @@ async fn mcb_04_policy_failure_preserves_error_and_stops_all_effects() {
         error,
         DiscordRuntimeError::Store(StoreError::UnsupportedVersion {
             found: 999,
-            supported: 2
+            supported: cdr_store::schema::LATEST_STORE_SCHEMA_VERSION
         })
     ));
     effects.assert_zero();
@@ -158,7 +158,7 @@ async fn mcb_05_real_mirror_failure_cannot_reach_any_effect() {
         DiscordRuntimeError::MessageAdmission(MessageAdmissionError::Store(
             StoreError::UnsupportedVersion {
                 found: 999,
-                supported: 2
+                supported: cdr_store::schema::LATEST_STORE_SCHEMA_VERSION
             }
         ))
     ));

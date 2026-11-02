@@ -162,7 +162,7 @@ pub fn begin_checked(
         },
     )?;
     let count: i64 = tx.query_row(
-        "SELECT count(*) FROM codex_mutation_attempts WHERE state='prepared'",
+        "SELECT count(*) FROM cdr_live_codex_mutation_attempts WHERE state='prepared'",
         [],
         |r| r.get(0),
     )?;

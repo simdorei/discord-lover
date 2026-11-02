@@ -39,6 +39,14 @@ pub(crate) async fn send_chunk_guarded(
     guard: Option<&cdr_store::new_reply::DeliveryGuard<'_>>,
 ) -> Result<(), CompletionWorkerError> {
     // Validate before recording an attempt: malformed content was never sent.
+    let _effect = cdr_store::archived_cleanup::effects::admit(
+        db,
+        Some(
+            i64::try_from(channel.get())
+                .map_err(|error| CompletionWorkerError::Delivery(error.to_string()))?,
+        ),
+        None,
+    )?;
     #[cfg(test)]
     let mut timing = crate::test_support::path_timing::PhaseTimer::new("receipt");
     let request = idempotent_message_request_with_components(
@@ -74,12 +82,16 @@ pub(crate) async fn send_chunk_guarded(
         }
     #[cfg(test)]
     timing.mark("before_http");
-    let message = match async {
+    let message = match tokio::time::timeout(std::time::Duration::from_secs(25), async {
         let receipt = http.request::<Message>(request).await?.model().await?;
         Ok::<_, IdempotentMessageError>(receipt.id.to_string())
-    }
+    })
     .await
-    {
+    .map_err(|_| {
+        CompletionWorkerError::Delivery(
+            "Discord send deadline expired; outcome unknown, no automatic resend".into(),
+        )
+    })? {
         Ok(message) => message,
         Err(error) => {
             if delivery_receipt::confirmed_message(db, &key, &hash)?.is_some() {

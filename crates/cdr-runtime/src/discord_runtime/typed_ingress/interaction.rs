@@ -149,10 +149,14 @@ impl InteractionHandler for DiscordInteractionHandler {
     fn handle(&self, item: InteractionIngress) -> InteractionFuture {
         let handler = self.clone();
         Box::pin(async move {
-            let api = Arc::new(DiscordHttp::new(
-                Arc::clone(&handler.http),
-                item.event.application_id,
-            ));
+            let api = Arc::new(
+                DiscordHttp::new(Arc::clone(&handler.http), item.event.application_id)
+                    .with_store(
+                        &handler.resources.ingress_db,
+                        item.event.channel.as_ref().map(|c| c.id.get()),
+                    )
+                    .with_ingress(&format!("interaction:{}", item.event.id)),
+            );
             let mut policy = handler.resources.policy.as_ref().clone();
             crate::discord_runtime::bootstrap::refresh_mirror_policy(
                 &mut policy,

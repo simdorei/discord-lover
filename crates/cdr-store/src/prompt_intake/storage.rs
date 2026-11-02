@@ -102,14 +102,14 @@ pub(super) fn list(
     let (sql, parameter) = ready_at.map_or_else(
         || {
             (
-                format!("SELECT {COLUMNS} FROM {TABLE} ORDER BY created_at, job_id"),
+                format!("SELECT {COLUMNS} FROM cdr_live_codex_prompt_intakes ORDER BY created_at, job_id"),
                 None,
             )
         },
         |now| {
             (
                 format!(
-                    "SELECT {COLUMNS} FROM {TABLE} WHERE retry_after <= ? \
+                    "SELECT {COLUMNS} FROM cdr_live_codex_prompt_intakes WHERE retry_after <= ? \
                      AND claim_expires_at <= ? ORDER BY created_at, job_id"
                 ),
                 Some(now),

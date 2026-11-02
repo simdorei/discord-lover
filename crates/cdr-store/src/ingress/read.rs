@@ -34,7 +34,10 @@ pub fn get_for_owner_readonly(
         .query_row(
             &format!(
                 "SELECT {COLUMNS} FROM discord_ingress_journal
-                      WHERE ingress_id = ? AND channel_id = ? AND owner_user_id = ?"
+                      WHERE ingress_id = ?1 AND owner_user_id = ?3
+                      AND (channel_id = ?2 OR EXISTS(SELECT 1 FROM cdr_archived_room_dispositions d
+                          WHERE d.channel_id=discord_ingress_journal.channel_id AND d.parent_id=?2
+                          AND d.phase='mapping_retired'))"
             ),
             params![key, channel_id, owner_user_id],
             read_row,
@@ -81,8 +84,11 @@ pub fn list_for_owner(
 ) -> Result<Vec<StoredIngress>> {
     Ok(crate::schema::open_initialized(path)?
         .prepare(&format!(
-            "SELECT {COLUMNS} FROM discord_ingress_journal WHERE channel_id = ? AND owner_user_id = ?
-             AND (state = 'held' OR (state = 'completed' AND confirmation_delivered = 0))
+            "SELECT {COLUMNS} FROM discord_ingress_journal WHERE owner_user_id = ?2
+             AND (channel_id = ?1 OR EXISTS(SELECT 1 FROM cdr_archived_room_dispositions d
+                WHERE d.channel_id=discord_ingress_journal.channel_id AND d.parent_id=?1 AND d.phase='mapping_retired'))
+             AND (state = 'held' OR (state = 'completed' AND confirmation_delivered = 0)
+                OR EXISTS(SELECT 1 FROM cdr_archived_room_dispositions d WHERE d.channel_id=discord_ingress_journal.channel_id))
              ORDER BY created_at DESC, ingress_id LIMIT 20"
         ))?
         .query_map(params![channel_id, owner_user_id], read_row)?
@@ -115,7 +121,7 @@ pub(super) fn unfinished_prior(
 ) -> Result<Vec<StoredIngress>> {
     Ok(connection
         .prepare(&format!(
-            "SELECT {COLUMNS} FROM discord_ingress_journal WHERE runtime_id IS NOT ?
+            "SELECT {COLUMNS} FROM cdr_live_discord_ingress_journal WHERE runtime_id IS NOT ?
              AND owner_id IS NULL AND state IN ('staged','acknowledged','executing','completed')
              AND confirmation_delivered = 0 ORDER BY created_at, ingress_id"
         ))?

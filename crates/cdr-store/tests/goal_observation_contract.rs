@@ -1,4 +1,6 @@
 //! Revision 13: original execution and current-turn observation are separate evidence.
+#[path = "support/legacy_schema.rs"]
+mod legacy_schema;
 use cdr_store::{observed_completion, observed_final_answer, queue};
 use std::path::Path;
 
@@ -105,6 +107,7 @@ fn old_schema_migrates_without_fabricating_turn_or_execution_generation() {
     let db = temp.path().join("db.sqlite");
     waiting(&db);
     let connection = rusqlite::Connection::open(&db).unwrap();
+    legacy_schema::remove_retirement_guards(&connection);
     connection
         .execute_batch(
             // These modern capture triggers do not exist in the legacy fixture.

@@ -279,11 +279,13 @@ impl ResidentAppServer {
         request: AppRequest,
         expected_generation: Option<u64>,
     ) -> Result<Value, AppServerError> {
-        self.request(
+        self.request_scoped(
             request.method,
             request.params,
             request.timeout,
             expected_generation,
+            request.method == "thread/archive",
+            DispatchContext::default(),
         )
         .await
     }

@@ -166,7 +166,7 @@ fn stage_completion_inner(
 pub fn list_pending(path: &Path) -> Result<Vec<StoredDelivery>> {
     let connection = open_initialized(path)?;
     let mut statement = connection.prepare(&format!(
-        "SELECT {COLUMNS} FROM codex_delivery_outbox ORDER BY created_at, delivery_id"
+        "SELECT {COLUMNS} FROM cdr_live_codex_delivery_outbox ORDER BY created_at, delivery_id"
     ))?;
     let rows = statement
         .query_map([], StoredDelivery::read)?

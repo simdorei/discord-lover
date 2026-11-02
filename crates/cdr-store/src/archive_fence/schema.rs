@@ -2,15 +2,19 @@ use crate::{Result, StoreError};
 use rusqlite::{Connection, OptionalExtension};
 
 const VIEW: &str = include_str!("inspections.sql");
+const PREVIOUS_VIEW: &str = include_str!("inspections_before_explicit_archive.sql");
 const LEGACY_VIEW: &str = include_str!("inspections_legacy.sql");
 
-// Only the frozen legacy inspection view may be upgraded. Unknown definitions
+// Only known earlier inspection views may be upgraded. Unknown definitions
 // remain untouched. The initializer owns the backup and IMMEDIATE transaction.
 pub(crate) fn migrate_schema(db: &Connection) -> Result<()> {
     match installed_view(db)? {
         None => db.execute_batch(VIEW)?,
         Some((kind, sql)) if kind == "view" && same_definition(&sql, VIEW) => {}
-        Some((kind, sql)) if kind == "view" && same_definition(&sql, LEGACY_VIEW) => {
+        Some((kind, sql))
+            if kind == "view"
+                && (same_definition(&sql, LEGACY_VIEW) || same_definition(&sql, PREVIOUS_VIEW)) =>
+        {
             if db.is_autocommit() {
                 return Err(StoreError::ActiveTransaction);
             }

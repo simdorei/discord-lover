@@ -29,8 +29,24 @@ impl MirrorTransport for Rooms {
     fn channels(&self, _: u64) -> MirrorFuture<'_, Vec<MirrorChannel>> {
         unreachable!()
     }
-    fn thread_inventory(&self, _: u64, _: u64) -> MirrorFuture<'_, Vec<MirrorInventoryThread>> {
-        Box::pin(async { Ok(Vec::new()) })
+    fn thread_inventory(
+        &self,
+        _: u64,
+        parent: u64,
+    ) -> MirrorFuture<'_, Vec<MirrorInventoryThread>> {
+        Box::pin(async move {
+            Ok(self
+                .rooms
+                .lock()
+                .unwrap()
+                .values()
+                .filter(|room| room.parent_id == Some(parent) && room.kind.is_thread())
+                .map(|room| MirrorInventoryThread {
+                    channel: room.clone(),
+                    owned_by_bot: true,
+                })
+                .collect())
+        })
     }
     fn create<'a>(
         &'a self,
@@ -111,6 +127,7 @@ async fn actual_cleanup_callers_preserve_confirmed_result_when_retirement_loses_
                 },
             ]
             .into_iter()
+            .filter(|c| caller != 2 || c.id != 31)
             .filter(|c| !(missing && c.id == id))
             .map(|c| (c.id, c))
             .collect();
@@ -135,12 +152,14 @@ async fn actual_cleanup_callers_preserve_confirmed_result_when_retirement_loses_
             let fence = mirror.clone();
             sync.before_retirement = Some(Arc::new(move |room| {
                 assert_eq!(room, id);
-                assert_eq!(
-                    cdr_store::room_cleanup::phase(&fence, i64::try_from(room).unwrap())
+                let phase = if caller < 2 {
+                    cdr_store::archived_cleanup::get(&fence, i64::try_from(room).unwrap())
                         .unwrap()
-                        .as_deref(),
-                    Some("deleted")
-                );
+                        .map(|i| i.phase)
+                } else {
+                    cdr_store::room_cleanup::phase(&fence, i64::try_from(room).unwrap()).unwrap()
+                };
+                assert_eq!(phase.as_deref(), Some("deleted"));
                 observed.fetch_add(1, Ordering::SeqCst);
                 topology.invalidate();
             }));
@@ -156,7 +175,7 @@ async fn actual_cleanup_callers_preserve_confirmed_result_when_retirement_loses_
                     .await
                     .map(|_| ()),
                 1 => sync
-                    .retire_archived_rejections(
+                    .retire_archived_room(
                         &store,
                         1,
                         10.0,
@@ -193,12 +212,20 @@ async fn actual_cleanup_callers_preserve_confirmed_result_when_retirement_loses_
                 assert!(!error.contains("dispatched=true"));
             }
             assert_eq!(remote.deletes.load(Ordering::SeqCst), usize::from(!missing));
-            assert_eq!(
-                cdr_store::room_cleanup::phase(&mirror, i64::try_from(id).unwrap())
+            let phase = if caller < 2 {
+                cdr_store::archived_cleanup::get(&mirror, i64::try_from(id).unwrap())
                     .unwrap()
-                    .as_deref(),
-                Some("deleted")
-            );
+                    .map(|i| i.phase)
+            } else {
+                cdr_store::room_cleanup::phase(&mirror, i64::try_from(id).unwrap()).unwrap()
+            };
+            assert_eq!(phase.as_deref(), Some("deleted"));
+            if caller < 2 {
+                let mut result = crate::mirror_sync::MirrorSyncResult::default();
+                sync.reconcile_retirements(1, &mut result).await.unwrap();
+                assert_eq!(remote.deletes.load(Ordering::SeqCst), usize::from(!missing));
+                assert!(!result.skipped.is_empty());
+            }
             if caller == 2 {
                 assert!(
                     mapping::remaining_discord_ids(&mirror)

@@ -4,7 +4,7 @@ use std::path::Path;
 
 pub(super) fn failure(
     db: &Path,
-    reservation: &str,
+    reservation: &cdr_store::archive_fence::Reservation,
     thread: &str,
     error: AppServerError,
 ) -> ActionError {

@@ -24,7 +24,7 @@ pub(super) fn inspect(
     db.busy_timeout(Duration::from_secs(3))?;
     db.execute_batch("PRAGMA query_only=ON; BEGIN")?;
     let schema: i64 = db.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-    if schema != cdr_store::schema::LATEST_STORE_SCHEMA_VERSION {
+    if schema != 2 && schema != cdr_store::schema::LATEST_STORE_SCHEMA_VERSION {
         return Err("unsupported store schema; no migration was attempted".into());
     }
     let table_exists = |name: &str| -> rusqlite::Result<bool> {
@@ -92,6 +92,8 @@ pub(super) fn inspect(
         "configured_environment_verified":environment.is_some(),
         "environment":environment.map(|value|value.to_string_lossy()),
         "store_schema":schema,
+        "target_store_schema":cdr_store::schema::LATEST_STORE_SCHEMA_VERSION,
+        "migration_required":schema<cdr_store::schema::LATEST_STORE_SCHEMA_VERSION,
         "required_async_resolution_format":required,
         "supported_async_resolution_format":cdr_store::async_resolution::FORMAT_VERSION,
         "required_async_recovery_policy_format":required_policy,

@@ -48,7 +48,7 @@ async fn missing_and_unsupported_databases_are_never_created_or_migrated() {
     let missing = temp.path().join("missing.sqlite");
     assert!(check(&missing).await.is_err());
     assert!(!missing.exists());
-    for version in [0, 999] {
+    for version in [0, 1, 999] {
         let path = temp.path().join(format!("schema-{version}.sqlite"));
         let db = rusqlite::Connection::open(&path).unwrap();
         db.pragma_update(None, "user_version", version).unwrap();
@@ -57,6 +57,47 @@ async fn missing_and_unsupported_databases_are_never_created_or_migrated() {
         assert!(check(&path).await.is_err());
         assert_eq!(std::fs::read(&path).unwrap(), before);
     }
+}
+
+#[tokio::test]
+async fn schema_two_upgrade_probe_is_read_only_and_keeps_capability_checks() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("legacy.sqlite");
+    fixture::dispatching(&path, "resident");
+    let db = rusqlite::Connection::open(&path).unwrap();
+    let objects = db.prepare("SELECT type,name FROM sqlite_schema WHERE type IN ('trigger','view') AND (name LIKE 'cdr_archived_room_%' OR name LIKE 'cdr_retired_%' OR name LIKE 'cdr_live_%')").unwrap()
+        .query_map([],|r|Ok((r.get::<_,String>(0)?,r.get::<_,String>(1)?))).unwrap()
+        .collect::<rusqlite::Result<Vec<_>>>().unwrap();
+    for (kind, name) in objects {
+        db.execute_batch(&format!("DROP {kind} \"{name}\""))
+            .unwrap();
+    }
+    db.execute_batch(
+        "DROP TABLE cdr_archived_room_records;
+        DROP TABLE cdr_archived_room_history; DROP TABLE cdr_archived_room_dispositions;
+        DROP TABLE cdr_archived_room_receipt_confirmations; PRAGMA user_version=2;",
+    )
+    .unwrap();
+    drop(db);
+    let before = std::fs::read(&path).unwrap();
+    let result = check(&path).await.unwrap();
+    assert_eq!(result["compatible"], true);
+    assert_eq!(result["store_schema"], 2);
+    assert_eq!(result["target_store_schema"], 3);
+    assert_eq!(result["migration_required"], true);
+    assert_eq!(result["admission_authorized"], false);
+    assert_eq!(result["recovery_authorized"], false);
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let db = rusqlite::Connection::open(&path).unwrap();
+    db.execute(
+        "INSERT INTO cdr_runtime_capability_requirements VALUES('unknown-future-component',1)",
+        [],
+    )
+    .unwrap();
+    drop(db);
+    let unsupported = std::fs::read(&path).unwrap();
+    assert!(check(&path).await.unwrap_err().contains("does not support"));
+    assert_eq!(std::fs::read(&path).unwrap(), unsupported);
 }
 
 #[tokio::test]

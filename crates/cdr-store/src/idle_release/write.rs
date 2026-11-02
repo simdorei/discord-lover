@@ -34,7 +34,7 @@ pub(crate) fn stage_candidate(
     }
     // Final is already staged in this transaction. Capacity only defers release.
     let count: i64 = db.query_row(
-        "SELECT COUNT(*) FROM cdr_idle_release WHERE state!='Settled'",
+        "SELECT COUNT(*) FROM cdr_live_cdr_idle_release WHERE state!='Settled'",
         [],
         |r| r.get(0),
     )?;
@@ -59,6 +59,13 @@ pub fn before_mutation(
 ) -> Result<Option<Intent>> {
     let mut db = open_initialized(path)?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if crate::archived_cleanup::blocked_in(&tx, None, Some(thread))?
+        || crate::archived_cleanup::record_retired_in(&tx, "cdr_idle_release", thread)?
+    {
+        return Err(StoreError::Integrity(
+            "archived idle work cannot be resumed".into(),
+        ));
+    }
     let Some(mut intent) = select(&tx, thread)? else {
         return Ok(None);
     };

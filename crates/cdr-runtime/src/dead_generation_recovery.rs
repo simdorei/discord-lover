@@ -49,6 +49,23 @@ impl RuntimeDeadGenerationFence {
         identity: (Option<&Value>, Option<&Value>),
         scoped: bool,
     ) -> Result<bool, AppServerError> {
+        if method == "thread/archive" {
+            let target = extract_thread_id(params)
+                .ok_or_else(|| mutation_held("archive requires an exact target"))?;
+            if !scoped || identity.0.is_some() {
+                return Err(mutation_held("archive cannot borrow queue authority"));
+            }
+            cdr_store::archive_fence::validate_dispatch(
+                &self.mirror_db,
+                &self.runtime_id,
+                &target,
+                identity.1,
+            )
+            .map_err(mutation_held)?;
+            // The archive reservation is the durable intent. Do not settle or
+            // let an older mutation/response/stop hold block this explicit action.
+            return Ok(false);
+        }
         let wire_id = serde_json::to_string(request.1)?;
         let target = extract_thread_id(params);
         let generation = i64::try_from(owner.1).map_err(mutation_held)?;
@@ -116,6 +133,24 @@ impl RuntimeDeadGenerationFence {
 }
 
 impl DeadGenerationFence for RuntimeDeadGenerationFence {
+    fn admit_effect(
+        &self,
+        method: &str,
+        params: &Value,
+    ) -> Result<Option<Box<dyn Send + Sync>>, AppServerError> {
+        if method == "thread/archive" {
+            return Ok(None);
+        }
+        let target = extract_thread_id(params);
+        if target.is_none() {
+            return Ok(None);
+        }
+        let permit =
+            cdr_store::archived_cleanup::effects::admit(&self.mirror_db, None, target.as_deref())
+                .map_err(mutation_held)?;
+        Ok(Some(Box::new(permit)))
+    }
+
     fn request_origin(
         &self,
         method: &str,
@@ -291,6 +326,10 @@ impl DeadGenerationFence for RuntimeDeadGenerationFence {
         method: &str,
         params: &Value,
     ) -> Result<(), AppServerError> {
+        if method == "thread/archive" {
+            // Archive validates its own durable reservation at the actual write.
+            return Ok(());
+        }
         // Explicit interrupt and one-way server responses retain their existing
         // control/custody paths; neither clears an unresolved mutation record.
         if !cdr_app_server::requests::is_observational(method)

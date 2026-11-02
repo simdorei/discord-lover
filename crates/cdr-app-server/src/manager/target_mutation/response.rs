@@ -18,6 +18,7 @@ pub(in crate::manager) struct ResponseAttempt<'a> {
     payload: Value,
     admitted: AtomicBool,
     started: AtomicBool,
+    effect: std::sync::Mutex<Option<Box<dyn Send + Sync>>>,
 }
 
 impl<'a> ResponseAttempt<'a> {
@@ -34,10 +35,15 @@ impl<'a> ResponseAttempt<'a> {
             payload,
             admitted: AtomicBool::new(false),
             started: AtomicBool::new(false),
+            effect: std::sync::Mutex::new(None),
         }
     }
 
     pub(in crate::manager) fn begin(&self) -> Result<(), AppServerError> {
+        if let Some(fence) = &self.server.dead_generation_fence {
+            *self.effect.lock().expect("response effect permit") =
+                fence.admit_effect("server/response", &self.permit.original.params)?;
+        }
         self.server.check_actual_mutation(
             self.permit.permit.as_ref(),
             self.generation,

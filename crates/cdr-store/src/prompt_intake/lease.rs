@@ -20,6 +20,9 @@ pub fn try_claim_prompt_intake(
     let mut connection = open_initialized(path)?;
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     storage::ensure_schema(&transaction)?;
+    if crate::archived_cleanup::record_retired_in(&transaction, "codex_prompt_intakes", job_id)? {
+        return Ok(None);
+    }
     if crate::execution_hold::reason_in(&transaction, job_id)?.is_some() {
         return Ok(None);
     }
