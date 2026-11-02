@@ -298,7 +298,13 @@ async fn mirror_deadline_deleted_room_reply_stall_keeps_fence_without_redelete()
         remote.clone(),
         Some(1),
     );
-    assert_eq!(cold.sync(99, None).await.unwrap().archived, 1);
+    // A cold ownership reader performs real OS I/O, outside virtual time.
+    tokio::time::resume();
+    cdr_runtime::agy::ownership::AgyOwnership::for_root(temp.path(), 1)
+        .ensure_loaded(&path).await.unwrap();
+    tokio::time::pause();
+    let result = cold.sync(99, None).await.unwrap();
+    assert_eq!(result.archived, 1, "{result:?}");
     assert_eq!(
         remote.0.lock().unwrap().deletes,
         1,

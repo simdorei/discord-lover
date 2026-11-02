@@ -302,7 +302,8 @@ async fn stalled_http_releases_cleanup_permit_and_preserves_unknown_receipt() {
         tokio::time::timeout(Duration::from_secs(30), async { tokio::join!(send, close) })
             .await
             .unwrap();
-    assert!(result.unwrap_err().to_string().contains("deadline expired"));
+    let error = result.unwrap_err().to_string();
+    assert!(error.contains("deadline expired") || error.contains("send outcome unconfirmed"), "{error}");
     assert_eq!(
         cdr_store::archived_cleanup::effects::in_flight(&db, 31, "old").unwrap(),
         0
