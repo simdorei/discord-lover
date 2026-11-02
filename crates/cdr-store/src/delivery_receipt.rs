@@ -134,6 +134,12 @@ pub(crate) fn begin_guarded_in(
 pub fn confirm(path: &Path, key: &str, message_id: &str) -> Result<bool> {
     let mut connection = open_initialized(path)?;
     let tx = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if let Some(confirmed) =
+        crate::archived_cleanup::receipt::confirm_retired(&tx, key, message_id)?
+    {
+        tx.commit()?;
+        return Ok(confirmed);
+    }
     let changed = tx.execute("UPDATE codex_delivery_receipts SET message_id=? WHERE receipt_key=? AND (message_id IS NULL OR message_id=?)",params![message_id,key,message_id])?==1;
     if changed {
         crate::new_reply::confirm_receipt_in(&tx, key)?;

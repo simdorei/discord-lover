@@ -1,6 +1,7 @@
 //! Archived mirror routing dispositions are separate from execution outcomes.
 //! Original rows, unknown receipts and authorizations are never settled here.
 pub mod effects;
+mod legacy;
 pub(crate) mod receipt;
 mod records;
 use crate::{Result, StoreError};
@@ -293,6 +294,7 @@ pub fn retire_mapping(path: &Path, intent: &Intent, now: f64) -> Result<()> {
                 .into(),
         ));
     }
+    legacy::reconcile_in(&tx, intent)?;
     if tx.execute("UPDATE cdr_archived_room_dispositions SET phase='mapping_retired' WHERE operation_id=? AND phase='deleted'",[&intent.operation_id])?!=1 { return Err(StoreError::Integrity("cleanup CAS failed".into())); }
     tx.execute(
         "DELETE FROM mirror_threads WHERE codex_thread_id=? AND discord_thread_id=?",

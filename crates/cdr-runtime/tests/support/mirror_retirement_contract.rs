@@ -2,6 +2,51 @@ use super::*;
 use cdr_store::archived_cleanup as cleanup;
 use std::time::Duration;
 
+#[tokio::test]
+async fn legacy_unknown_cleanup_reconciles_only_authoritative_absence_and_keeps_other_rooms_live() {
+    for absent in [true, false] {
+        let temp = tempfile::tempdir().unwrap();
+        let (sync, remote) = fixture(&temp);
+        let db = temp.path().join("mirror.sqlite");
+        let token = cdr_store::room_cleanup::begin(&db, 31, Some("thread-old"), 1.0).unwrap();
+        let attempts = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = attempts.clone();
+        remote.0.lock().unwrap().before_delete = Some(Arc::new(move |id| {
+            if id == 31 {
+                observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            }
+        }));
+        if absent {
+            remote.0.lock().unwrap().channels.remove(&31);
+        }
+        let result = sync.sync(99, None).await.unwrap();
+        assert_eq!(result.threads, 2);
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert_eq!(result.archived, usize::from(absent));
+        assert_eq!(
+            thread_channels(&db, "thread-old").unwrap().is_none(),
+            absent
+        );
+        assert_eq!(
+            cdr_store::room_cleanup::phase(&db, 31).unwrap().as_deref(),
+            Some(if absent { "deleted" } else { "deleting" })
+        );
+        if absent {
+            let intent = cleanup::get(&db, 31).unwrap().unwrap();
+            assert_eq!(intent.phase, "mapping_retired");
+            let snapshot:String=Connection::open(&db).unwrap().query_row(
+                "SELECT snapshot_json FROM cdr_archived_room_records WHERE operation_id=? AND table_name='cdr_cleanup_fences'",
+                [&intent.operation_id],|r|r.get(0)).unwrap();
+            let saved: serde_json::Value = serde_json::from_str(&snapshot).unwrap();
+            assert_eq!(saved["token"], token);
+            assert_eq!(saved["phase"], "deleting");
+        } else {
+            assert!(!result.skipped.is_empty());
+            assert!(cleanup::get(&db, 31).unwrap().is_none());
+        }
+    }
+}
+
 async fn wait_prepared(path: &std::path::Path) {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {

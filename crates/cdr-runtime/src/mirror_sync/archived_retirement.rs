@@ -69,8 +69,9 @@ impl MirrorSynchronizer {
         let parent = discord_id(owner.discord_channel_id)?;
         self.validate_exact_mapping(&row.thread_id, room, parent)?;
         let remote = self.remote.channel(room).await?;
-        match cdr_store::room_cleanup::phase(&self.mirror_db, row.discord_thread_id)?.as_deref() {
-            Some("deleting") => {
+        let legacy = cdr_store::room_cleanup::phase(&self.mirror_db, row.discord_thread_id)?;
+        match legacy.as_deref() {
+            Some("deleting") if remote.is_some() => {
                 return Err(invalid(
                     "prior cleanup DELETE outcome is unknown; no repeat DELETE",
                 ));
@@ -142,6 +143,11 @@ impl MirrorSynchronizer {
         .map_err(|_| invalid("dispatch drain timed out; prepared intent retained, no DELETE"))??;
         // Recheck after slow lookups and dispatch draining, before DELETE.
         let current = self.remote.channel(room).await?;
+        if legacy.is_some() && current.is_some() {
+            return Err(invalid(
+                "legacy cleanup requires authoritative absence; no repeat DELETE",
+            ));
+        }
         if let Some(channel) = &current {
             if channel.id != room {
                 return Err(invalid("archived cleanup Discord identity mismatch"));
@@ -175,7 +181,7 @@ impl MirrorSynchronizer {
                 "native source changed before DELETE; room preserved",
             ));
         }
-        if current.is_some() {
+        let outcome = if current.is_some() {
             let attempt = cleanup::transition_checked(
                 &self.mirror_db,
                 &intent,
@@ -246,6 +252,7 @@ impl MirrorSynchronizer {
                     )));
                 }
             }
+            super::delete_guard::CleanupOutcome::Deleted
         } else {
             intent = cleanup::transition(
                 &self.mirror_db,
@@ -254,12 +261,9 @@ impl MirrorSynchronizer {
                 "authoritative Discord 404; no DELETE needed",
                 now()?,
             )?;
-        }
-        self.validate_before_retirement(
-            &custody,
-            room,
-            super::delete_guard::CleanupOutcome::PreviouslyConfirmed,
-        )?;
+            super::delete_guard::CleanupOutcome::ObservedMissing
+        };
+        self.validate_before_retirement(&custody, room, outcome)?;
         cleanup::retire_mapping(&self.mirror_db, &intent, now()?)?;
         Ok(true)
     }

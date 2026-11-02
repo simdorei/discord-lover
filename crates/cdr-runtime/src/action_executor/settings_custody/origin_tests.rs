@@ -25,6 +25,10 @@ struct Fixture {
 
 impl Fixture {
     async fn new() -> Self {
+        Self::with_mode("normal").await
+    }
+
+    async fn with_mode(mode: &str) -> Self {
         let temp = tempfile::tempdir().unwrap();
         let db = temp.path().join("store.sqlite");
         let state = temp.path().join("state.sqlite");
@@ -45,7 +49,7 @@ impl Fixture {
         );
         config
             .environment
-            .insert("SETTINGS_TEST_MODE".into(), "normal".into());
+            .insert("SETTINGS_TEST_MODE".into(), mode.into());
         let server = Arc::new(
             ResidentAppServer::start_with_dead_generation_fence(config, fence)
                 .await
@@ -154,6 +158,65 @@ fn count(calls: &[Value], method: &str, target: &str) -> usize {
         .iter()
         .filter(|call| call["method"] == method && call["params"]["threadId"] == target)
         .count()
+}
+
+#[tokio::test]
+async fn settings_catalog_wait_cannot_revive_retired_ingress_after_restore() {
+    use cdr_store::archived_cleanup as cleanup;
+    let f = Fixture::with_mode("catalog-pause").await;
+    let (key, action, context) = f.admit(901, "thread-b", 42, "model-b");
+    let before = ingress::get(&f.db, &key).unwrap().unwrap();
+    let mut old = Box::pin(
+        f.executor
+            .execute_with_ingress_context(action, context, &key),
+    );
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while !f._temp.path().join("catalog-ready").exists() {
+            tokio::select! {
+                result=&mut old => panic!("catalog must suspend: {result:?}"),
+                ()=tokio::time::sleep(Duration::from_millis(10))=>{}
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let state = rusqlite::Connection::open(f._temp.path().join("state.sqlite")).unwrap();
+    state
+        .execute_batch("UPDATE threads SET archived=1,archived_at=50 WHERE id='thread-b'")
+        .unwrap();
+    let intent = cleanup::prepare(&f.db, &cleanup::Prepare {
+        channel:42,target:"thread-b",parent:100,guild:1,origin:&Value::Null,now:3.0,
+    }, || Ok(json!({"archived":state.query_row("SELECT archived FROM threads WHERE id='thread-b'",[],|r|r.get::<_,bool>(0))?}).to_string())).unwrap();
+    state
+        .execute_batch("UPDATE threads SET archived=0 WHERE id='thread-b'")
+        .unwrap();
+    cleanup::transition(
+        &f.db,
+        &intent,
+        "aborted_source_changed",
+        "source restored",
+        4.0,
+    )
+    .unwrap();
+    std::fs::write(f._temp.path().join("catalog-release"), "release").unwrap();
+    let result = old.await;
+    assert!(result.is_err(), "old settings request unexpectedly resumed");
+    assert_eq!(count(&f.calls(), "thread/resume", "thread-b"), 0);
+    assert_eq!(count(&f.calls(), "thread/settings/update", "thread-b"), 0);
+    assert_eq!(ingress::get(&f.db, &key).unwrap().unwrap(), before);
+    assert_eq!(
+        cleanup::ingress_operation(&f.db, &key).unwrap(),
+        Some(intent.operation_id)
+    );
+    let (key, action, context) = f.admit(902, "thread-b", 42, "model-b");
+    let fresh = f
+        .executor
+        .execute_with_ingress_context(action, context, &key)
+        .await;
+    let calls = f.calls();
+    f.server.close().await.unwrap();
+    assert!(fresh.is_ok(), "{fresh:?}");
+    assert_eq!(count(&calls, "thread/settings/update", "thread-b"), 1);
 }
 
 #[tokio::test]

@@ -29,6 +29,23 @@ CREATE TABLE IF NOT EXISTS cdr_archived_room_records (
 );
 CREATE INDEX IF NOT EXISTS cdr_archived_work_identity
 ON cdr_archived_room_records(table_name,row_key);
+CREATE TABLE IF NOT EXISTS cdr_archived_room_receipt_confirmations (
+    receipt_key TEXT PRIMARY KEY,
+    operation_id TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    message_id TEXT NOT NULL CHECK(length(message_id)>0),
+    recorded_at REAL NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS cdr_archived_room_receipt_no_replace
+BEFORE INSERT ON cdr_archived_room_receipt_confirmations
+WHEN EXISTS(SELECT 1 FROM cdr_archived_room_receipt_confirmations WHERE receipt_key=NEW.receipt_key)
+BEGIN SELECT RAISE(IGNORE); END;
+CREATE TRIGGER IF NOT EXISTS cdr_archived_room_receipt_update
+BEFORE UPDATE ON cdr_archived_room_receipt_confirmations
+BEGIN SELECT RAISE(ABORT,'archived receipt evidence is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS cdr_archived_room_receipt_delete
+BEFORE DELETE ON cdr_archived_room_receipt_confirmations
+BEGIN SELECT RAISE(ABORT,'archived receipt evidence must be preserved'); END;
 CREATE TRIGGER IF NOT EXISTS cdr_archived_room_identity_immutable
 BEFORE UPDATE ON cdr_archived_room_dispositions
 WHEN NEW.operation_id IS NOT OLD.operation_id OR NEW.channel_id IS NOT OLD.channel_id

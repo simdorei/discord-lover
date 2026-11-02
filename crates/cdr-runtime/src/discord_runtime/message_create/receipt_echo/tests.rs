@@ -22,6 +22,94 @@ fn claim(db: &Path, domain: &str, logical: &str, index: usize, content: &str) ->
     (key, message_nonce(domain, Id::new(42), logical, index))
 }
 
+#[tokio::test]
+async fn late_verified_echo_adds_immutable_evidence_after_mapping_retirement_without_resend() {
+    use cdr_store::archived_cleanup as cleanup;
+    let temp = tempfile::tempdir().unwrap();
+    let db = temp.path().join("receipt.sqlite");
+    cdr_store::mapping::upsert_thread(&db, "old", "p", "old", 21, 42, 1.0).unwrap();
+    let (key, nonce) = claim(&db, "completion/v1", "old-output", 0, "final");
+    let intent = cleanup::prepare(
+        &db,
+        &cleanup::Prepare {
+            channel: 42,
+            target: "old",
+            parent: 21,
+            guild: 1,
+            origin: &json!({}),
+            now: 2.0,
+        },
+        || Ok("{}".into()),
+    )
+    .unwrap();
+    let deleted = cleanup::transition(&db, &intent, "deleted", "404", 3.0).unwrap();
+    cleanup::retire_mapping(&db, &deleted, 4.0).unwrap();
+    assert!(!confirm(&db, &message("final"), Some(nonce + 1), Some(9)).unwrap());
+    assert!(confirm(&db, &message("final"), Some(nonce), Some(9)).unwrap());
+    assert!(confirm(&db, &message("final"), Some(nonce), Some(9)).unwrap());
+    let hash = hex::encode(Sha256::digest(b"final"));
+    assert_eq!(
+        delivery_receipt::confirmed_message(&db, &key, &hash)
+            .unwrap()
+            .as_deref(),
+        Some("987")
+    );
+    assert!(!delivery_receipt::confirm(&db, &key, "988").unwrap());
+    let connection = rusqlite::Connection::open(&db).unwrap();
+    assert!(
+        connection
+            .query_row(
+                "SELECT message_id FROM codex_delivery_receipts WHERE receipt_key=?",
+                [&key],
+                |r| r.get::<_, Option<String>>(0)
+            )
+            .unwrap()
+            .is_none()
+    );
+    assert!(connection.query_row("SELECT json_extract(snapshot_json,'$.message_id') FROM cdr_archived_room_records WHERE table_name='codex_delivery_receipts' AND row_key=json_array(?)",[&key],|r|r.get::<_,Option<String>>(0)).unwrap().is_none());
+    assert!(
+        connection
+            .execute("DELETE FROM cdr_archived_room_receipt_confirmations", [])
+            .is_err()
+    );
+    assert!(
+        connection
+            .execute(
+                "UPDATE cdr_archived_room_receipt_confirmations SET message_id='changed'",
+                []
+            )
+            .is_err()
+    );
+    assert_eq!(
+        cleanup::get(&db, 42).unwrap().unwrap().phase,
+        "mapping_retired"
+    );
+    assert!(matches!(
+        delivery_receipt::begin(&db, &key, &hash).unwrap(),
+        ReceiptState::Held(_)
+    ));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let client = std::sync::Arc::new(
+        twilight_http::Client::builder()
+            .token("fixture".into())
+            .proxy(listener.local_addr().unwrap().to_string(), true)
+            .ratelimiter(None)
+            .build(),
+    );
+    let sender = cdr_discord::http::DiscordHttp::new(client, Id::new(9)).with_store(&db, Some(42));
+    assert!(
+        sender
+            .send_idempotent_message(Id::new(42), "final", &[], "completion/v1", "old-output", 0)
+            .await
+            .is_err()
+    );
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), listener.accept())
+            .await
+            .is_err()
+    );
+}
+
 #[test]
 fn exact_gateway_acknowledgement_releases_unknown_progress_idempotently() {
     let temp = tempfile::tempdir().unwrap();

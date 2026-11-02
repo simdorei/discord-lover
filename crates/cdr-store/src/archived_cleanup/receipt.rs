@@ -2,6 +2,38 @@
 use crate::Result;
 use rusqlite::{Connection, params};
 
+/// A verified HTTP/Gateway result adds evidence; it never reopens old work or
+/// rewrites the captured unknown receipt. Caller holds the writer transaction.
+pub(crate) fn confirm_retired(
+    db: &Connection,
+    key: &str,
+    message_id: &str,
+) -> Result<Option<bool>> {
+    if !super::record_retired_in(db, "codex_delivery_receipts", key)? {
+        return Ok(None);
+    }
+    if message_id.is_empty() {
+        return Ok(Some(false));
+    }
+    db.execute(
+        "INSERT OR IGNORE INTO cdr_archived_room_receipt_confirmations
+         (receipt_key,operation_id,content_hash,message_id,recorded_at)
+         SELECT r.receipt_key,e.operation_id,r.content_hash,?2,unixepoch('subsec')
+         FROM codex_delivery_receipts r JOIN cdr_archived_room_records e
+         ON e.table_name='codex_delivery_receipts' AND e.row_key=json_array(r.receipt_key)
+         WHERE r.receipt_key=?1 AND (r.message_id IS NULL OR r.message_id=?2)
+         ORDER BY e.rowid LIMIT 1",
+        params![key, message_id],
+    )?;
+    Ok(Some(db.query_row(
+        "SELECT EXISTS(SELECT 1 FROM cdr_archived_room_receipt_confirmations c
+         JOIN codex_delivery_receipts r ON r.receipt_key=c.receipt_key AND r.content_hash=c.content_hash
+         WHERE c.receipt_key=?1 AND c.message_id=?2 AND (r.message_id IS NULL OR r.message_id=?2))",
+        params![key, message_id],
+        |row| row.get(0),
+    )?))
+}
+
 pub(crate) fn retired(db: &Connection, key: &str) -> Result<bool> {
     let Ok(value) = serde_json::from_str::<serde_json::Value>(key) else {
         return Ok(false);

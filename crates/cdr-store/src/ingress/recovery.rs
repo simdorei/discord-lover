@@ -66,11 +66,13 @@ fn hold_in(
         .ok_or_else(|| StoreError::Integrity(format!("missing ingress hold: {key}")))?;
     // A closed archived mirror retains exact non-dispatch evidence, not a
     // fictional confirmation. Do not stage a new POST into that closed room.
-    if crate::archived_cleanup::blocked_in(
-        connection,
-        Some(record.channel_id),
-        record.target_thread_id.as_deref(),
-    )? || crate::room_cleanup::archived_rejections::preserves(connection, key)?
+    if crate::archived_cleanup::record_retired_in(connection, "discord_ingress_journal", key)?
+        || crate::archived_cleanup::blocked_in(
+            connection,
+            Some(record.channel_id),
+            record.target_thread_id.as_deref(),
+        )?
+        || crate::room_cleanup::archived_rejections::preserves(connection, key)?
     {
         return Ok(());
     }

@@ -4,11 +4,12 @@ use cdr_store::StoreError;
 use cdr_store::schema::{LATEST_STORE_SCHEMA_VERSION, assert_integrity, open_initialized};
 use rusqlite::Connection;
 
-const OWNED_TABLES: [&str; 49] = [
+const OWNED_TABLES: [&str; 50] = [
     "cdr_server_responses",
     "cdr_archived_room_dispositions",
     "cdr_archived_room_history",
     "cdr_archived_room_records",
+    "cdr_archived_room_receipt_confirmations",
     "busy_choices",
     "cdr_archive_fences",
     "cdr_archived_cleanup_evidence",

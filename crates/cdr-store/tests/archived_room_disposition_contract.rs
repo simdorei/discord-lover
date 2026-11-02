@@ -148,6 +148,13 @@ fn abort_then_rearchive_keeps_distinct_operations_and_never_revives_old_work() {
         .is_err()
     );
     assert!(cleanup::effects::admit(&path, Some(31), Some("old")).is_ok());
+    cdr_store::ingress::hold(&path, "old", "late worker ended", true, 22.0).unwrap();
+    assert_eq!(
+        db.query_row("SELECT count(*) FROM codex_delivery_outbox", [], |r| r
+            .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
     assert!(
         !cdr_store::ingress::begin_execution(&path, "old", "processing", Some("old"), 22.0)
             .unwrap()
@@ -164,6 +171,29 @@ fn abort_then_rearchive_keeps_distinct_operations_and_never_revives_old_work() {
         2
     );
     assert!(cleanup::effects::admit(&path, Some(31), Some("old")).is_err());
+}
+
+#[test]
+fn legacy_fence_identity_change_cannot_retire_the_mapping() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("db.sqlite");
+    mapping::upsert_thread(&path, "old", "p", "old", 21, 31, 1.0).unwrap();
+    cdr_store::room_cleanup::begin(&path, 31, Some("old"), 1.0).unwrap();
+    let intent = prepare(&path);
+    let deleted = cleanup::transition(&path, &intent, "deleted", "404", 21.0).unwrap();
+    Connection::open(&path)
+        .unwrap()
+        .execute(
+            "UPDATE cdr_cleanup_fences SET token='different-owner' WHERE channel_id=31",
+            [],
+        )
+        .unwrap();
+    assert!(cleanup::retire_mapping(&path, &deleted, 22.0).is_err());
+    assert_eq!(
+        mapping::thread_channels(&path, "old").unwrap(),
+        Some((21, 31))
+    );
+    assert_eq!(cleanup::get(&path, 31).unwrap().unwrap().phase, "deleted");
 }
 
 #[test]
