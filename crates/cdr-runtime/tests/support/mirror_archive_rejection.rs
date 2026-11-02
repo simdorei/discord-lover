@@ -69,7 +69,8 @@ async fn agy_custody_preserves_archived_rejections_without_fencing_or_retirement
                 .unwrap();
             store.confirm_container("protected", 31).unwrap();
         }
-        assert!(sync.sync(99, None).await.is_err());
+        assert!(!sync.sync(99, None).await.unwrap().skipped.is_empty());
+        assert!(cdr_store::archived_cleanup::get(&db,31).unwrap().is_none());
         assert_eq!(remote.0.lock().unwrap().deletes, 0);
         assert!(thread_channels(&db, "thread-old").unwrap().is_some());
         assert_eq!(cdr_store::room_cleanup::phase(&db, 31).unwrap(), None);

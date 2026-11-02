@@ -143,6 +143,7 @@ fn s1_new_database_matches_shared_schema_and_rust_extensions() {
             .into_iter()
             .chain([
                 "cdr_archived_room_current",
+                "cdr_archived_work_identity",
                 "cdr_stop_pending",
                 "cdr_stop_target",
                 "cdr_stop_original_interrupt",

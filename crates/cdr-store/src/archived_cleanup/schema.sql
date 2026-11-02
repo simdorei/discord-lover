@@ -27,6 +27,8 @@ CREATE TABLE IF NOT EXISTS cdr_archived_room_records (
     snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
     PRIMARY KEY(operation_id,table_name,row_key)
 );
+CREATE INDEX IF NOT EXISTS cdr_archived_work_identity
+ON cdr_archived_room_records(table_name,row_key);
 CREATE TRIGGER IF NOT EXISTS cdr_archived_room_identity_immutable
 BEFORE UPDATE ON cdr_archived_room_dispositions
 WHEN NEW.operation_id IS NOT OLD.operation_id OR NEW.channel_id IS NOT OLD.channel_id
