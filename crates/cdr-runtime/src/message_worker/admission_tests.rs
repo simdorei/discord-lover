@@ -116,7 +116,7 @@ fn mpb_03_claim_failure_preserves_the_store_error_without_admission() {
         error,
         MessageAdmissionError::Store(StoreError::UnsupportedVersion {
             found: 999,
-            supported: 2
+            supported: cdr_store::schema::LATEST_STORE_SCHEMA_VERSION
         })
     ));
 }

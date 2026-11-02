@@ -63,7 +63,7 @@ fn mcg_04_mirror_lookup_failure_preserves_error_without_a_claim() {
         error,
         MessageAdmissionError::Store(StoreError::UnsupportedVersion {
             found: 999,
-            supported: 2
+            supported: cdr_store::schema::LATEST_STORE_SCHEMA_VERSION
         })
     ));
     let connection = rusqlite::Connection::open(&database).expect("reopen future database");
