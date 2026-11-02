@@ -50,7 +50,8 @@ async fn register_until_success(
     application_id: Id<twilight_model::id::marker::ApplicationMarker>,
     context: &TypedIngressContext,
 ) {
-    let api = DiscordHttp::new(context.http.clone(), application_id);
+    let api = DiscordHttp::new(context.http.clone(), application_id)
+        .with_store(context.executor.mirror_db(), None);
     let scope = context
         .config
         .guild_id
@@ -87,7 +88,8 @@ async fn send_notice_until_success(
     let Some(channel) = context.config.startup_channel_id.map(Id::new) else {
         return;
     };
-    let api = DiscordHttp::new(context.http.clone(), application_id);
+    let api = DiscordHttp::new(context.http.clone(), application_id)
+        .with_store(context.executor.mirror_db(), None);
     let mut state = StartupNoticeState::new(uuid::Uuid::new_v4().simple().to_string());
     let mut failures = 0_usize;
     loop {

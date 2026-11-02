@@ -132,16 +132,19 @@ async fn cancelled_delete_keeps_fence_across_reopen_and_never_retries() {
     assert!(job.await.unwrap_err().is_cancelled());
     let db = temp.path().join("mirror.sqlite");
     assert_eq!(
-        cdr_store::room_cleanup::phase(&db, 31).unwrap().as_deref(),
-        Some("deleting")
+        cdr_store::archived_cleanup::get(&db, 31)
+            .unwrap()
+            .map(|i| i.phase)
+            .as_deref(),
+        Some("delete_attempted")
     );
     remote.0.lock().unwrap().pause_delete = None;
     assert!(
         sync.sync(99, None)
             .await
-            .unwrap_err()
+            .unwrap()
             .to_string()
-            .contains("fenced")
+            .contains("unknown")
     );
     assert!(remote.0.lock().unwrap().channels.contains_key(&31));
 }
@@ -154,18 +157,13 @@ async fn lost_delete_response_keeps_mapping_and_reports_uncertainty_on_next_sync
     assert!(
         sync.sync(99, None)
             .await
-            .unwrap_err()
+            .unwrap()
             .to_string()
-            .contains("unconfirmed")
+            .contains("unknown")
     );
     let db = temp.path().join("mirror.sqlite");
     assert!(thread_channels(&db, "thread-old").unwrap().is_some());
-    assert!(
-        sync.sync(99, None)
-            .await
-            .unwrap_err()
-            .to_string()
-            .contains("unconfirmed")
-    );
-    assert!(thread_channels(&db, "thread-old").unwrap().is_some());
+    assert_eq!(sync.sync(99, None).await.unwrap().archived, 1);
+    assert!(thread_channels(&db, "thread-old").unwrap().is_none());
+    assert_eq!(remote.0.lock().unwrap().deletes, 1);
 }

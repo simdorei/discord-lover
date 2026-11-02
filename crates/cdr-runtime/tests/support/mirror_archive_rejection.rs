@@ -103,8 +103,11 @@ async fn archived_rejected_controls_are_preserved_without_blocking_mirror_cleanu
         assert_eq!(ingress::get(&db, key).unwrap().unwrap(), original);
     }
     assert_eq!(
-        cdr_store::room_cleanup::phase(&db, 31).unwrap().as_deref(),
-        Some("deleted")
+        cdr_store::archived_cleanup::get(&db, 31)
+            .unwrap()
+            .map(|i| i.phase)
+            .as_deref(),
+        Some("mapping_retired")
     );
 }
 

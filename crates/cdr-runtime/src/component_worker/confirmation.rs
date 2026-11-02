@@ -164,11 +164,23 @@ pub async fn deliver_confirmation_and_clear(
             .map_err(|error| ConfirmationError::Delivery(error.to_string()))
         },
         async {
+            let _permit = cdr_store::archived_cleanup::effects::admit(
+                database,
+                Some(
+                    i64::try_from(channel_id.get())
+                        .map_err(|e| ConfirmationError::Clear(e.to_string()))?,
+                ),
+                None,
+            )
+            .map_err(|e| ConfirmationError::Clear(e.to_string()))?;
             if let Some(message_id) = source_message_id
-                && let Err(error) = http
-                    .update_message(channel_id, message_id)
-                    .components(Some(&[]))
-                    .await
+                && let Err(error) = tokio::time::timeout(
+                    std::time::Duration::from_secs(25),
+                    http.update_message(channel_id, message_id)
+                        .components(Some(&[])),
+                )
+                .await
+                .map_err(|e| ConfirmationError::Clear(e.to_string()))?
             {
                 return Err(ConfirmationError::Clear(error.to_string()));
             }

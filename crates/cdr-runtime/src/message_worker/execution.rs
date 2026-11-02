@@ -51,6 +51,10 @@ pub(super) async fn enrich_plan<B: TurnBackend>(
     })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "Keep the ordered validation and effect boundary visible in one workflow"
+)]
 pub(super) async fn execute_plan<B: TurnBackend>(
     message: &Message,
     context: &MessageContext<'_, B>,
@@ -61,7 +65,8 @@ pub(super) async fn execute_plan<B: TurnBackend>(
     let key = format!("message:{}", message.id);
     #[cfg(test)]
     let _timing = crate::test_support::path_timing::PhaseTimer::new("message.execute");
-    let api = DiscordHttp::new(Arc::clone(&context.http), context.application_id);
+    let api = DiscordHttp::new(Arc::clone(&context.http), context.application_id)
+        .with_store(context.executor.mirror_db(), Some(message.channel_id.get()));
     match plan {
         MessagePlan::Ignore(_) => unreachable!("ignore plans never cross durable admission"),
         MessagePlan::Respond(text) => {

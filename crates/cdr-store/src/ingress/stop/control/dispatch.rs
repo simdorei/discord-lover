@@ -46,6 +46,11 @@ pub fn claim(
 }
 
 fn validate_original(db: &Connection, control: &StopControl) -> Result<()> {
+    if crate::archived_cleanup::record_retired_in(db, "cdr_stop_controls", &control.operation_id)?
+        || crate::archived_cleanup::blocked_in(db, Some(control.channel), Some(&control.target))?
+    {
+        return Err(refused());
+    }
     if !retained_in(db, control)? {
         return Err(refused());
     }

@@ -32,6 +32,13 @@ impl<B: TurnBackend> ActionExecutor<B> {
         };
         let generation = server.generation();
         let stored_generation = id_i64(generation)?;
+        // A new thread has no target ID yet. Its original Discord room still
+        // participates in retirement admission and bounded dispatch draining.
+        let start_effect = cdr_store::archived_cleanup::effects::admit(
+            &self.mirror_db,
+            Some(ingress.channel_id),
+            ingress.target_thread_id.as_deref(),
+        )?;
         if !begin_thread_start(
             &self.mirror_db,
             &ingress.ingress_id,
@@ -76,6 +83,7 @@ impl<B: TurnBackend> ActionExecutor<B> {
                 "thread {thread_id} was created but recording its known identity failed: {error}"
             )),false)
         })?;
+        drop(start_effect);
         // The original prompt and returned ID are durable before remote room creation.
         // An uncertain Discord create is held, never blindly retried or sent elsewhere.
         let destination = if let Some(sync) = self.mirror_sync.get() {

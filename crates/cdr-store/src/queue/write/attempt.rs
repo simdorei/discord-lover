@@ -48,6 +48,14 @@ pub fn try_begin_attempt(
         Err(StoreError::QueueJobNotFound(_)) => return Ok(None),
         Err(error) => return Err(error),
     };
+    if crate::archived_cleanup::blocked_in(
+        &transaction,
+        Some(candidate.channel_id),
+        Some(&candidate.target_thread_id),
+    )? || crate::archived_cleanup::record_retired_in(&transaction, "codex_turn_queue", job_id)?
+    {
+        return Ok(None);
+    }
     crate::async_resolution::assert_admission_in(&transaction, &candidate.target_thread_id)?;
     if !crate::dead_generation::job_can_mutate(&transaction, &candidate)?
         || crate::execution_hold::reason_in(&transaction, job_id)?.is_some()

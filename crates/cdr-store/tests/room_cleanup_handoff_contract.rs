@@ -187,13 +187,20 @@ fn mc_10_database_and_existing_fence_failures_are_not_known_protection_refusals(
     Connection::open(&db).unwrap().execute_batch("ALTER TABLE codex_goal_progress RENAME COLUMN content TO changed_content; ALTER TABLE codex_goal_progress RENAME COLUMN channel TO changed_channel;").unwrap();
     assert!(matches!(
         room_cleanup::pending_reason(&db, 31, Some("target")),
-        Err(cdr_store::StoreError::Database(_))
+        Err(cdr_store::StoreError::Database(_) | cdr_store::StoreError::Integrity(_))
     ));
     assert!(matches!(
         room_cleanup::begin(&db, 31, Some("target"), 20.0),
-        Err(cdr_store::StoreError::Database(_))
+        Err(cdr_store::StoreError::Database(_) | cdr_store::StoreError::Integrity(_))
     ));
-    assert_eq!(room_cleanup::phase(&db, 31).unwrap(), None);
+    assert_eq!(
+        Connection::open(&db)
+            .unwrap()
+            .query_row("SELECT count(*) FROM cdr_cleanup_fences", [], |r| r
+                .get::<_, i64>(0))
+            .unwrap(),
+        0
+    );
     let temp = tempfile::tempdir().unwrap();
     let db = temp.path().join("mirror.sqlite");
     owned_prompt::settled(&db);

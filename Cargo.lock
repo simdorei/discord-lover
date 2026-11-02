@@ -309,6 +309,7 @@ dependencies = [
 name = "cdr-discord"
 version = "0.1.0"
 dependencies = [
+ "cdr-store",
  "hex",
  "rustls",
  "serde",

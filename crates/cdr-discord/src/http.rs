@@ -32,6 +32,10 @@ pub enum CommandRegistrationScope {
 
 #[derive(Debug, Error)]
 pub enum DiscordHttpError {
+    #[error("Discord effect held: {0}")]
+    Held(String),
+    #[error("Discord operation deadline expired; outcome unknown, no automatic retry")]
+    Deadline,
     #[error("Discord HTTP request failed: {0}")]
     Request(#[from] twilight_http::Error),
     #[error("Discord response model decode failed: {0}")]
@@ -44,6 +48,8 @@ pub enum DiscordHttpError {
 pub struct DiscordHttp {
     client: Arc<Client>,
     application_id: Id<ApplicationMarker>,
+    store: Option<(std::path::PathBuf, Option<i64>)>,
+    ingress: Option<String>,
 }
 
 impl DiscordHttp {
@@ -57,7 +63,44 @@ impl DiscordHttp {
         Self {
             client,
             application_id,
+            store: None,
+            ingress: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_store(mut self, path: &std::path::Path, channel: Option<u64>) -> Self {
+        self.store = Some((path.to_owned(), channel.and_then(|v| i64::try_from(v).ok())));
+        self
+    }
+
+    #[must_use]
+    pub fn with_ingress(mut self, key: &str) -> Self {
+        self.ingress = Some(key.into());
+        self
+    }
+
+    fn admit(
+        &self,
+        channel: Option<u64>,
+    ) -> Result<Option<cdr_store::archived_cleanup::effects::Permit>, DiscordHttpError> {
+        let Some((db, default_channel)) = &self.store else {
+            return Ok(None);
+        };
+        let channel = channel
+            .and_then(|v| i64::try_from(v).ok())
+            .or(*default_channel)
+            .ok_or_else(|| DiscordHttpError::Held("missing delivery room identity".into()))?;
+        cdr_store::archived_cleanup::effects::admit_record(
+            db,
+            Some(channel),
+            None,
+            self.ingress
+                .as_deref()
+                .map(|key| ("discord_ingress_journal", key)),
+        )
+        .map(Some)
+        .map_err(|e| DiscordHttpError::Held(e.to_string()))
     }
 
     pub async fn register_slash_commands(
@@ -84,10 +127,15 @@ impl DiscordHttp {
         interaction_token: &str,
         response: &InteractionResponse,
     ) -> Result<(), DiscordHttpError> {
-        self.client
-            .interaction(self.application_id)
-            .create_response(interaction_id, interaction_token, response)
-            .await?;
+        let _permit = self.admit(None)?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(25),
+            self.client
+                .interaction(self.application_id)
+                .create_response(interaction_id, interaction_token, response),
+        )
+        .await
+        .map_err(|_| DiscordHttpError::Deadline)??;
         Ok(())
     }
 
@@ -117,6 +165,7 @@ impl DiscordHttp {
         content: &str,
         components: &[Component],
     ) -> Result<(), DiscordHttpError> {
+        let _permit = self.admit(None)?;
         let allowed_mentions = AllowedMentions::default();
         let interaction = self.client.interaction(self.application_id);
         let mut request = interaction
@@ -126,7 +175,9 @@ impl DiscordHttp {
         if !components.is_empty() {
             request = request.components(Some(components));
         }
-        request.await?;
+        tokio::time::timeout(std::time::Duration::from_secs(25), request)
+            .await
+            .map_err(|_| DiscordHttpError::Deadline)??;
         Ok(())
     }
 
@@ -140,16 +191,21 @@ impl DiscordHttp {
         logical_key: &str,
         chunk_index: usize,
     ) -> Result<(), DiscordHttpError> {
-        send_idempotent_message_with_components(
-            &self.client,
-            channel_id,
-            content,
-            components,
-            domain,
-            logical_key,
-            chunk_index,
+        let _permit = self.admit(Some(channel_id.get()))?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(25),
+            send_idempotent_message_with_components(
+                &self.client,
+                channel_id,
+                content,
+                components,
+                domain,
+                logical_key,
+                chunk_index,
+            ),
         )
-        .await?;
+        .await
+        .map_err(|_| DiscordHttpError::Deadline)??;
         Ok(())
     }
 }

@@ -33,6 +33,13 @@ impl MirrorSynchronizer {
             ))
         })
     }
+    pub(super) fn room_excluded(&self, room: i64) -> Result<bool, MirrorSyncError> {
+        Ok(
+            cdr_store::room_cleanup::phase(&self.mirror_db, room)?.is_some()
+                || cdr_store::archived_cleanup::get(&self.mirror_db, room)?
+                    .is_some_and(|i| i.phase != "aborted_source_changed"),
+        )
+    }
     pub(super) fn ensure_cleanup_reconciled(&self) -> Result<(), MirrorSyncError> {
         let rooms = cdr_store::room_cleanup::unconfirmed_channels(&self.mirror_db)?;
         if !rooms.is_empty() {

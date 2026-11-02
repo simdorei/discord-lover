@@ -28,7 +28,8 @@ pub(super) async fn recover(
             .ok()
             .and_then(Id::new_checked)
             .ok_or(CompletionWorkerError::ChannelId)?;
-        let api = DiscordHttp::new(Arc::clone(http), Id::new(1)); // Channel POST does not use application ID.
+        let api =
+            DiscordHttp::new(Arc::clone(http), Id::new(1)).with_store(database, Some(origin.get())); // Channel POST does not use application ID.
         if let Err(error) = deliver_reply_text(
             database,
             &api,

@@ -42,6 +42,7 @@ impl MirrorSynchronizer {
                 // Snowflakes created after this sync started might not have their mapping committed yet.
                 let created_ms = (channel.id >> 22) + 1_420_070_400_000;
                 if !entry.owned_by_bot
+                    || self.room_excluded(db_id(channel.id)?)?
                     || channel.kind != ChannelType::PublicThread
                     || u128::from(created_ms) >= started_ms
                     || is_mirrored_channel(&self.mirror_db, Some(db_id(channel.id)?))?
@@ -74,6 +75,17 @@ impl MirrorSynchronizer {
             }
             let id = discord_id(row.discord_channel_id)?;
             let custody = self.custody(id).await?;
+            // Keep an authorized place to inspect saved requests after the
+            // original thread room is deleted.
+            if cdr_store::archived_cleanup::inspection_parent(
+                &self.mirror_db,
+                row.discord_channel_id,
+            )? {
+                continue;
+            }
+            if self.room_excluded(row.discord_channel_id)? {
+                continue;
+            }
             self.ensure_no_requests(id)?;
             let outcome = if let Some(channel) = self.remote.channel(id).await? {
                 super::channels::validate(&channel, guild, ChannelType::GuildText, None)?;

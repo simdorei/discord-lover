@@ -41,7 +41,7 @@ async fn custody_blocks_stale_delete_missing_room_fence_and_exact_mapping_retire
                         Some("deleted")
                     );
                 } else {
-                    assert!(sync.sync(99, None).await.is_err());
+                    assert!(!sync.sync(99, None).await.unwrap().skipped.is_empty());
                     assert_eq!(cdr_store::room_cleanup::phase(&db, 31).unwrap(), None);
                 }
                 assert!(thread_channels(&db, "thread-old").unwrap().is_some());

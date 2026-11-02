@@ -133,6 +133,24 @@ impl RuntimeDeadGenerationFence {
 }
 
 impl DeadGenerationFence for RuntimeDeadGenerationFence {
+    fn admit_effect(
+        &self,
+        method: &str,
+        params: &Value,
+    ) -> Result<Option<Box<dyn Send + Sync>>, AppServerError> {
+        if method == "thread/archive" {
+            return Ok(None);
+        }
+        let target = extract_thread_id(params);
+        if target.is_none() {
+            return Ok(None);
+        }
+        let permit =
+            cdr_store::archived_cleanup::effects::admit(&self.mirror_db, None, target.as_deref())
+                .map_err(mutation_held)?;
+        Ok(Some(Box::new(permit)))
+    }
+
     fn request_origin(
         &self,
         method: &str,

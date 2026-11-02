@@ -19,6 +19,11 @@ pub fn validate_in(
         .filter(|id| !id.is_empty())
         .ok_or_else(revoked)?;
     let current = select_job(connection, job_id)?;
+    if crate::archived_cleanup::record_retired_in(connection, "codex_turn_queue", job_id)?
+        || crate::archived_cleanup::blocked_in(connection, Some(current.channel_id), Some(target))?
+    {
+        return Err(revoked());
+    }
     let actual = serde_json::to_value(&current)?;
     // Delivery-only queued/ack_sent flags are not execution authority.
     let fields = [

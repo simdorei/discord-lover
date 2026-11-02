@@ -26,6 +26,12 @@ impl<B: TurnBackend> ActionExecutor<B> {
         let records = list_for_owner(&self.mirror_db, id_i64(channel_id)?, id_i64(user_id)?)?;
         let mut lines = vec!["Your saved requests needing attention (latest 20):".to_owned()];
         for record in records {
+            if let Some(operation) =
+                cdr_store::archived_cleanup::ingress_operation(&self.mirror_db, &record.ingress_id)?
+            {
+                lines.push(format!("{} | archived mirror retired; original outcome preserved; no automatic replay | operation: {}",record.ingress_id,operation));
+                continue;
+            }
             if let Some(refusal) =
                 cdr_store::ingress::CleanupRefusal::from_outcome(record.outcome.as_ref())
             {
@@ -86,7 +92,7 @@ impl<B: TurnBackend> ActionExecutor<B> {
         if lines.len() == 1 {
             lines.push("none".into());
         }
-        lines.push("Inspect: !runners <request_id> (original user and channel only).".into());
+        lines.push("Inspect: !runners <request_id> (original user; original room or retired mirror's project channel).".into());
         Ok(lines.join("\n"))
     }
 
@@ -125,7 +131,9 @@ impl<B: TurnBackend> ActionExecutor<B> {
         let payload = serde_json::to_string_pretty(&payload).map_err(|error| {
             ActionError::Invalid(format!("saved payload formatting failed: {error}"))
         })?;
-        let display_reason = format!("{}{known_outcome}", record.hold_reason);
+        let retirement=cdr_store::archived_cleanup::get(&self.mirror_db,record.channel_id)?
+            .map_or_else(String::new,|intent|format!("\narchived mirror retired; original outcome preserved; no automatic replay\ncleanup_operation: {}",intent.operation_id));
+        let display_reason = format!("{}{known_outcome}{retirement}", record.hold_reason);
         Ok(format!(
             "Saved Discord request (read-only)\nrequest_id: {}\nstate: {}\nphase: {}\ntarget: {}\nreason: {}\nThis does not retry, release, or delete the request.\nOriginal payload below omits credential fields only.\noriginal_payload:\n{payload}",
             record.ingress_id,

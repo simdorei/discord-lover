@@ -9,6 +9,7 @@ impl MirrorSynchronizer {
         &self,
         guild: u64,
         started: f64,
+        result: &mut super::MirrorSyncResult,
     ) -> Result<usize, MirrorSyncError> {
         let store = CodexThreadStore::open(&self.state_db)?;
         // Only a successful, unfiltered active inventory establishes absence.
@@ -32,15 +33,35 @@ impl MirrorSynchronizer {
             // Duplicate ownership needs explicit reconciliation. Mapping-only
             // deletion would bypass the pending-work fence and race with ingress.
             if shared.contains(&row.discord_thread_id) {
-                return Err(MirrorSyncError::Invalid(format!(
+                result.skipped.push(format!(
                     "shared Discord room {} has an active mapping; room and mappings preserved; resolve duplicate ownership before sync",
                     row.discord_thread_id
-                )));
+                ));
+                continue;
             }
-            count += usize::from(
-                self.retire_obsolete_row(&store, guild, started, &row, None)
-                    .await?,
-            );
+            match self
+                .retire_obsolete_row(&store, guild, started, &row, None)
+                .await
+            {
+                Ok(removed) => {
+                    count += usize::from(removed);
+                    if removed
+                        && let Some(intent) = cdr_store::archived_cleanup::get(
+                            &self.mirror_db,
+                            row.discord_thread_id,
+                        )?
+                    {
+                        for (family, amount) in
+                            cdr_store::archived_cleanup::counts(&self.mirror_db, &intent)?
+                        {
+                            *result.records_preserved.entry(family).or_default() += amount;
+                        }
+                    }
+                }
+                Err(error) => result
+                    .skipped
+                    .push(format!("room {}: {error}", row.discord_thread_id)),
+            }
         }
         Ok(count)
     }
@@ -53,18 +74,12 @@ impl MirrorSynchronizer {
         row: &StaleThread,
         parent: Option<u64>,
     ) -> Result<bool, MirrorSyncError> {
-        // Only archived mapped rooms may reconcile exact expired Steer
-        // non-dispatch evidence. Ordinary, orphan and absent-source paths stay strict.
+        // Native archival authorizes retirement independently of old bot work.
         if parent.is_none()
-            && cdr_store::room_cleanup::pending_reason(
-                &self.mirror_db,
-                row.discord_thread_id,
-                Some(&row.thread_id),
-            )? == Some("ingress")
             && let Some(archived) = store.load_thread(&row.thread_id, true)?
         {
             return self
-                .retire_archived_rejections(store, guild, started, row, &archived)
+                .retire_archived_room(store, guild, started, row, &archived)
                 .await;
         }
         // A missing Discord room is not permission to drop its pending work mapping.

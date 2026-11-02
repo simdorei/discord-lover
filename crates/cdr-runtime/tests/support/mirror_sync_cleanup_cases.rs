@@ -33,7 +33,7 @@ async fn failed_delete_keeps_the_mapping_for_retry() {
     assert!(
         sync.sync(99, None)
             .await
-            .unwrap_err()
+            .unwrap()
             .to_string()
             .contains("HTTP 403")
     );

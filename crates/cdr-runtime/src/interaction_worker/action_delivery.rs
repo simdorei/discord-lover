@@ -18,7 +18,9 @@ pub(super) async fn deliver(
     server: &ResidentAppServer,
     http: Arc<Client>,
 ) -> Result<(), InteractionWorkerError> {
-    let api = DiscordHttp::new(Arc::clone(&http), work.application_id);
+    let api = DiscordHttp::new(Arc::clone(&http), work.application_id)
+        .with_store(database, Some(work.channel_id.get()))
+        .with_ingress(&work.custody_ingress_id);
     if super::new_reply::deliver(work, result, database, &api).await? {
         return Ok(());
     }
@@ -35,13 +37,17 @@ pub(super) async fn deliver(
             prompts,
         )
         .await?;
-        let api = DiscordHttp::new(http, work.application_id);
+        let api = DiscordHttp::new(http, work.application_id)
+            .with_store(database, Some(work.channel_id.get()))
+            .with_ingress(&work.custody_ingress_id);
         deliver_interaction_text_idempotent(&api, work, &result.text, INTERACTION_FOLLOWUP_DOMAIN)
             .await
             .map_err(InteractionWorkerError::Delivery)?;
         return Ok(());
     }
-    let api = DiscordHttp::new(http, work.application_id);
+    let api = DiscordHttp::new(http, work.application_id)
+        .with_store(database, Some(work.channel_id.get()))
+        .with_ingress(&work.custody_ingress_id);
     let components = crate::action_ui::render_action_ui(result.ui.as_ref())?;
     if components.is_empty() {
         deliver_interaction_text_idempotent(&api, work, &result.text, INTERACTION_FOLLOWUP_DOMAIN)

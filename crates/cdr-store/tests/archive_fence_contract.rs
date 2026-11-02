@@ -215,7 +215,7 @@ fn archive_inspection_remains_usable_but_unknown_work_is_held_until_outcome_know
 }
 
 #[test]
-fn missing_archive_extension_is_backed_up_and_repaired_without_changing_shared_v2() {
+fn missing_archive_extension_is_backed_up_and_repaired_without_changing_current_schema() {
     let temp = tempfile::tempdir().unwrap();
     let db = temp.path().join("db.sqlite");
     let mut connection = schema::open_initialized(&db).unwrap();
@@ -224,7 +224,10 @@ fn missing_archive_extension_is_backed_up_and_repaired_without_changing_shared_v
         .unwrap();
     let backup = schema::initialize(&mut connection, &db).unwrap().unwrap();
     assert!(backup.is_file());
-    assert_eq!(schema::schema_version(&connection).unwrap(), 2);
+    assert_eq!(
+        schema::schema_version(&connection).unwrap(),
+        schema::LATEST_STORE_SCHEMA_VERSION
+    );
     assert!(schema::initialize(&mut connection, &db).unwrap().is_none());
     let previous = rusqlite::Connection::open(backup).unwrap();
     assert_eq!(

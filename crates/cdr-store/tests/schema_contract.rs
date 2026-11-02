@@ -4,8 +4,11 @@ use cdr_store::StoreError;
 use cdr_store::schema::{LATEST_STORE_SCHEMA_VERSION, assert_integrity, open_initialized};
 use rusqlite::Connection;
 
-const OWNED_TABLES: [&str; 46] = [
+const OWNED_TABLES: [&str; 49] = [
     "cdr_server_responses",
+    "cdr_archived_room_dispositions",
+    "cdr_archived_room_history",
+    "cdr_archived_room_records",
     "busy_choices",
     "cdr_archive_fences",
     "cdr_archived_cleanup_evidence",
@@ -139,6 +142,7 @@ fn s1_new_database_matches_shared_schema_and_rust_extensions() {
         OWNED_INDEXES
             .into_iter()
             .chain([
+                "cdr_archived_room_current",
                 "cdr_stop_pending",
                 "cdr_stop_target",
                 "cdr_stop_original_interrupt",
@@ -241,7 +245,7 @@ fn s3_version_one_store_is_backed_up_before_queue_migration() {
         backups[0]
             .file_name()
             .to_string_lossy()
-            .contains(".v1-to-v2.")
+            .contains(".v1-to-v3.")
     );
     let backup = Connection::open(backups[0].path()).expect("open migration backup");
     let legacy_count: i64 = backup

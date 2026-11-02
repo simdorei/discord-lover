@@ -128,7 +128,18 @@ impl MirrorTransport for Remote {
     }
     fn channel(&self, id: u64) -> MirrorFuture<'_, Option<MirrorChannel>> {
         Box::pin(async move {
-            let pause = self.0.lock().unwrap().pause_channel.clone();
+            let pause = {
+                let mut state = self.0.lock().unwrap();
+                if state
+                    .pause_channel
+                    .as_ref()
+                    .is_some_and(|(paused, _, _)| *paused == id)
+                {
+                    state.pause_channel.take()
+                } else {
+                    None
+                }
+            };
             if let Some((paused_id, started, release)) = pause
                 && paused_id == id
             {
@@ -448,3 +459,5 @@ mod archive_rejection;
 
 #[path = "support/mirror_agy_custody.rs"]
 mod agy_custody;
+#[path = "support/mirror_retirement_contract.rs"]
+mod retirement_contract;

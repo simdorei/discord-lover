@@ -5,6 +5,10 @@ use sha2::{Digest, Sha256};
 use twilight_model::channel::ChannelType;
 
 impl MirrorSynchronizer {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep the ordered validation and effect boundary visible in one workflow"
+    )]
     pub(super) async fn project_channel(
         &self,
         guild: u64,
@@ -14,6 +18,13 @@ impl MirrorSynchronizer {
         channels: &mut Vec<MirrorChannel>,
     ) -> Result<MirrorChannel, MirrorSyncError> {
         let stored = find_project(&self.mirror_db, Some(key), keys_match)?;
+        if let Some(stored) = &stored
+            && self.room_excluded(stored.channel_id)?
+        {
+            return Err(MirrorSyncError::Invalid(
+                "project cleanup unresolved; create/reuse/update excluded".into(),
+            ));
+        }
         let expected = cdr_store::mapping::container_creation::project_snapshot(
             &self.mirror_db,
             key,
@@ -44,6 +55,9 @@ impl MirrorSynchronizer {
                     && channel.parent_id == Some(category)
                     && channel.topic.as_deref() == Some(&topic)
             }) {
+                if self.room_excluded(db_id(candidate.id)?)? {
+                    continue;
+                }
                 if cdr_store::mapping::project_for_channel(
                     &self.mirror_db,
                     Some(db_id(candidate.id)?),
@@ -68,6 +82,11 @@ impl MirrorSynchronizer {
             expected_name = format!("{expected_name}-{}", &hash[..6]);
         }
         let channel = if let Some(mut channel) = channel {
+            if self.room_excluded(db_id(channel.id)?)? {
+                return Err(MirrorSyncError::Invalid(
+                    "project cleanup unresolved".into(),
+                ));
+            }
             validate(&channel, guild, ChannelType::GuildText, None)?;
             if channel.name != expected_name || channel.topic.as_deref() != Some(&topic) {
                 self.remote
@@ -113,6 +132,18 @@ impl MirrorSynchronizer {
         name: &str,
     ) -> Result<(MirrorChannel, Option<(i64, i64)>), MirrorSyncError> {
         let expected = thread_channels(&self.mirror_db, thread)?;
+        if cdr_store::archived_cleanup::unresolved_target(&self.mirror_db, thread)? {
+            return Err(MirrorSyncError::Invalid(
+                "target cleanup unresolved; create/reuse/update excluded".into(),
+            ));
+        }
+        if self.room_excluded(db_id(parent)?)?
+            || expected.is_some_and(|(_, room)| self.room_excluded(room).unwrap_or(true))
+        {
+            return Err(MirrorSyncError::Invalid(
+                "thread cleanup unresolved; create/reuse/update excluded".into(),
+            ));
+        }
         let scope = cdr_store::mapping::creation::CreationScope {
             thread,
             guild: db_id(guild)?,
@@ -127,6 +158,9 @@ impl MirrorSynchronizer {
             None
         };
         let channel = if let Some(channel) = channel {
+            if self.room_excluded(db_id(channel.id)?)? {
+                return Err(MirrorSyncError::Invalid("thread cleanup unresolved".into()));
+            }
             validate(&channel, guild, ChannelType::PublicThread, Some(parent))?;
             if channel.name != name || channel.archived {
                 self.remote.update(&channel, name, None, false).await?;

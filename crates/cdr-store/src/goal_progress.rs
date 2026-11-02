@@ -167,7 +167,7 @@ fn read(r: &rusqlite::Row<'_>) -> rusqlite::Result<PendingProgress> {
 pub fn pending(path: &Path) -> Result<Vec<PendingProgress>> {
     let c = open_initialized(path)?;
     let mut q = c.prepare(
-        "SELECT thread,turn,channel,content,last_error,job_id FROM codex_goal_progress ORDER BY rowid",
+        "SELECT thread,turn,channel,content,last_error,job_id FROM cdr_live_codex_goal_progress ORDER BY rowid",
     )?;
     Ok(q.query_map([], read)?
         .collect::<rusqlite::Result<Vec<_>>>()?)

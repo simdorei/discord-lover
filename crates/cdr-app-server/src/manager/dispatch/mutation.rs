@@ -20,6 +20,7 @@ pub(super) struct Attempt<'a> {
     request_id: Mutex<Option<RequestId>>,
     started: AtomicBool,
     scoped: bool,
+    effect: Mutex<Option<Box<dyn Send + Sync>>>,
 }
 
 impl<'a> Attempt<'a> {
@@ -58,10 +59,17 @@ impl<'a> Attempt<'a> {
             request_id: Mutex::new(None),
             started: AtomicBool::new(false),
             scoped: identified && (known || stop_claim.is_some()),
+            effect: Mutex::new(None),
         }
     }
 
     pub(super) fn begin(&self, wire_id: &RequestId) -> Result<(), AppServerError> {
+        if !is_observational(self.method)
+            && let Some(fence) = &self.server.dead_generation_fence
+        {
+            *self.effect.lock().expect("effect permit") =
+                fence.admit_effect(self.method, self.params)?;
+        }
         // Interrupt remains an explicit control, not authority to clear an old
         // mutation. Its existing dispatch/transport protection is unchanged.
         if is_observational(self.method)

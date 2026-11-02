@@ -4,6 +4,16 @@ use cdr_store::mapping::{MirrorThreadUpdate, commit_thread_sync};
 use std::collections::BTreeMap;
 
 impl MirrorSynchronizer {
+    pub async fn sync_with_origin(
+        &self,
+        channel: u64,
+        limit: Option<i64>,
+        origin: serde_json::Value,
+    ) -> Result<MirrorSyncResult, MirrorSyncError> {
+        super::SYNC_ORIGIN
+            .scope(origin, self.sync(channel, limit))
+            .await
+    }
     pub async fn sync(
         &self,
         origin_channel: u64,
@@ -13,12 +23,15 @@ impl MirrorSynchronizer {
             .await
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "Keep the ordered validation and effect boundary visible in one workflow"
+    )]
     async fn sync_locked(
         &self,
         origin_channel: u64,
         limit: Option<i64>,
     ) -> Result<MirrorSyncResult, MirrorSyncError> {
-        self.ensure_cleanup_reconciled()?;
         let started = now()?;
         // Validate local read positions before changing Discord rooms. Missing
         // plain logs may be restored here; no saved cursor is ever reset by sync.
@@ -56,7 +69,26 @@ impl MirrorSynchronizer {
             limited: limit.is_some(),
             ..MirrorSyncResult::default()
         };
+        if limit.is_none() {
+            self.reconcile_retirements(guild, &mut result).await?;
+        }
         for (thread, available) in threads {
+            if cdr_store::archived_cleanup::unresolved_target(&self.mirror_db, &thread.id)? {
+                result.skipped.push(format!(
+                    "thread {}: prior cleanup unresolved; create/reuse/update excluded",
+                    thread.id
+                ));
+                continue;
+            }
+            if let Some((parent, room)) =
+                cdr_store::mapping::thread_channels(&self.mirror_db, &thread.id)?
+                && (self.room_excluded(room)? || self.room_excluded(parent)?)
+            {
+                result.skipped.push(format!(
+                    "room {room}: prior cleanup unresolved; mapping/create/reuse excluded"
+                ));
+                continue;
+            }
             if !available {
                 result.unavailable += 1;
                 eprintln!(
@@ -66,6 +98,17 @@ impl MirrorSynchronizer {
                 continue;
             }
             let (key, project_name) = names::project(&thread);
+            if let Some(stored) = cdr_store::mapping::find_project(
+                &self.mirror_db,
+                Some(&key),
+                super::channels::keys_match,
+            )? && self.room_excluded(stored.channel_id)?
+            {
+                result.skipped.push(format!(
+                    "project {project_name}: prior cleanup unresolved; create/reuse/update excluded"
+                ));
+                continue;
+            }
             let parent = if let Some(parent) = projects.get(&key) {
                 *parent
             } else {
@@ -96,7 +139,7 @@ impl MirrorSynchronizer {
         }
         result.projects = projects.len();
         if limit.is_none() {
-            result.archived = self.retire_obsolete(guild, started).await?;
+            result.archived += self.retire_obsolete(guild, started, &mut result).await?;
             (result.orphan_deleted, result.projects_deleted) =
                 self.cleanup_orphans(guild, started).await?;
         }

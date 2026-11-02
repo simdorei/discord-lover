@@ -102,7 +102,7 @@ pub(crate) fn read(db: &Connection, id: &str) -> Result<Question> {
 
 pub fn pending(path: &Path, runtime: &str) -> Result<Vec<Question>> {
     let db = open_initialized(path)?;
-    let ids = db.prepare("SELECT id FROM cdr_async_questions WHERE runtime_id=? AND state='observed' ORDER BY created_at,json_extract(body,'$.index'),id LIMIT 100")?
+    let ids = db.prepare("SELECT id FROM cdr_live_cdr_async_questions WHERE runtime_id=? AND state='observed' ORDER BY created_at,json_extract(body,'$.index'),id LIMIT 100")?
         .query_map([runtime], |r| r.get::<_,String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
     ids.iter().map(|id| read(&db, id)).collect()
 }
@@ -176,7 +176,11 @@ pub(crate) fn validate_mapping(db: &Connection, q: &Question) -> Result<()> {
     let matches: bool = db.query_row("SELECT COUNT(*)=1 AND MIN(codex_thread_id)=?2 FROM mirror_threads WHERE discord_thread_id=?1",
         params![q.channel_id,q.thread_id], |r|r.get(0))?;
     let fenced: bool = db.query_row("SELECT EXISTS(SELECT 1 FROM cdr_cleanup_fences WHERE channel_id=?1) OR EXISTS(SELECT 1 FROM codex_dead_generation_holds WHERE target_thread_id=?2) OR EXISTS(SELECT 1 FROM codex_archive_fences WHERE target_thread_id=?2)",params![q.channel_id,q.thread_id],|r|r.get(0))?;
-    if !matches || fenced {
+    if !matches
+        || fenced
+        || crate::archived_cleanup::record_retired_in(db, "cdr_async_questions", &q.id)?
+        || crate::archived_cleanup::blocked_in(db, Some(q.channel_id), Some(&q.thread_id))?
+    {
         return Err(invalid(
             "question mapping changed or target is fenced; no answer sent",
         ));

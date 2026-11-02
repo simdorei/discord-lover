@@ -79,7 +79,7 @@ pub fn get(path: &Path, thread: &str) -> Result<Option<Intent>> {
 pub fn pending(path: &Path) -> Result<Vec<Intent>> {
     let db = open_initialized(path)?;
     let mut stmt = db.prepare(&format!(
-        "SELECT {COLUMNS} FROM cdr_idle_release WHERE state!='Settled' ORDER BY thread_id LIMIT {MAX_UNRESOLVED}"
+        "SELECT {COLUMNS} FROM cdr_live_cdr_idle_release WHERE state!='Settled' ORDER BY thread_id LIMIT {MAX_UNRESOLVED}"
     ))?;
     Ok(stmt
         .query_map([], Intent::read)?

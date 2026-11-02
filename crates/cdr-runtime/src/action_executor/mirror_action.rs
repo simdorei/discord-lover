@@ -62,12 +62,12 @@ impl<B: TurnBackend> ActionExecutor<B> {
 
     pub(super) async fn bridge_sync(
         &self,
-        channel: u64,
+        context: super::ActionContext,
         limit: Option<i64>,
     ) -> Result<ActionResult, ActionError> {
         let sync = self.mirror_sync.get().ok_or(ActionError::Unsupported(
             "mirror sync transport is not configured",
         ))?;
-        Ok(immediate(sync.sync(channel, limit).await?.to_string()))
+        Ok(immediate(sync.sync_with_origin(context.channel_id, limit,serde_json::json!({"command":"mirror sync","channel":context.channel_id,"actor":context.user_id,"source_event":context.discord_message_id})).await?.to_string()))
     }
 }

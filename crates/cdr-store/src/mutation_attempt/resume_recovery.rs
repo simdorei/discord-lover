@@ -35,7 +35,7 @@ pub fn candidates(path: &Path, runtime: &str) -> Result<Vec<Candidate>> {
     owner_is_current(&db, runtime)?;
     let rows = db
         .prepare(
-            "SELECT attempt_id,target_thread_id FROM codex_mutation_attempts
+            "SELECT attempt_id,target_thread_id FROM cdr_live_codex_mutation_attempts
         WHERE state='prepared' AND method='thread/resume' AND scoped=1 AND runtime_id<>?
         ORDER BY sequence LIMIT 64",
         )?

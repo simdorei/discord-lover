@@ -68,6 +68,30 @@ pub(crate) fn begin_guarded_in(
     content_hash: &str,
     guard: Option<&crate::new_reply::DeliveryGuard<'_>>,
 ) -> Result<ReceiptState> {
+    let parsed: serde_json::Value = serde_json::from_str(key).unwrap_or(serde_json::Value::Null);
+    let channel = parsed
+        .get(0)
+        .and_then(serde_json::Value::as_i64)
+        .filter(|id| *id > 0);
+    let invalid_scoped = channel.is_none()
+        && transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM cdr_archived_room_dispositions)",
+            [],
+            |r| r.get::<_, bool>(0),
+        )?;
+    if invalid_scoped
+        || crate::archived_cleanup::blocked_in(transaction, channel, None)?
+        || crate::archived_cleanup::record_retired_in(transaction, "codex_delivery_receipts", key)?
+    {
+        return Ok(ReceiptState::Held(
+            "invalid receipt identity or archived mirror retired; no automatic replay".into(),
+        ));
+    }
+    if crate::archived_cleanup::receipt::retired(transaction, key)? {
+        return Ok(ReceiptState::Held(
+            "original delivery work retired; no automatic replay".into(),
+        ));
+    }
     crate::final_recovery::validate_claim_in(transaction, key, content_hash, guard)?;
     if let Some(reason) =
         crate::new_reply::validate_claim_in(transaction, key, content_hash, guard)?
@@ -119,7 +143,7 @@ pub fn confirm(path: &Path, key: &str, message_id: &str) -> Result<bool> {
 }
 pub fn unknown_count(path: &Path) -> Result<i64> {
     Ok(open_initialized(path)?.query_row(
-        "SELECT COUNT(*) FROM codex_delivery_receipts WHERE message_id IS NULL AND retryable=0 AND blocked_reason IS NULL",
+        "SELECT COUNT(*) FROM cdr_live_codex_delivery_receipts WHERE message_id IS NULL AND retryable=0 AND blocked_reason IS NULL",
         [],
         |row| row.get(0),
     )?)
@@ -149,7 +173,7 @@ pub fn block_rejected(path: &Path, key: &str, reason: &str) -> Result<bool> {
 
 pub fn blocked_count(path: &Path) -> Result<i64> {
     Ok(open_initialized(path)?.query_row(
-        "SELECT COUNT(*) FROM codex_delivery_receipts WHERE message_id IS NULL AND blocked_reason IS NOT NULL",
+        "SELECT COUNT(*) FROM cdr_live_codex_delivery_receipts WHERE message_id IS NULL AND blocked_reason IS NOT NULL",
         [], |row| row.get(0))?)
 }
 

@@ -1,3 +1,5 @@
+#[path = "support/legacy_schema.rs"]
+mod legacy_schema;
 use cdr_store::{
     delivery, idle_release as idle, mapping, queue, reserve_policy, room_cleanup,
     schema::open_initialized,
@@ -95,6 +97,7 @@ fn old_feature_shapes_migrate_without_discarding_existing_work() {
         candidate(&db);
         reserve_policy::ensure(&db, "thread").unwrap();
         let connection = open_initialized(&db).unwrap();
+        legacy_schema::remove_retirement_guards(&connection);
         // These guards did not exist in either historical parent. Remove their
         // dependencies before manufacturing the old column/table shape, then
         // require migration to recreate every guard below.

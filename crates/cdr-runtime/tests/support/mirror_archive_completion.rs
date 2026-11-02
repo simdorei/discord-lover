@@ -12,8 +12,11 @@ async fn authoritative_missing_room_keeps_evidence_and_finishes_only_its_mapping
     assert_eq!(ingress::get(&db, &key).unwrap().unwrap(), before);
     assert_eq!(audit_count(&db), 1);
     assert_eq!(
-        room_cleanup::phase(&db, 31).unwrap().as_deref(),
-        Some("deleted")
+        cdr_store::archived_cleanup::get(&db, 31)
+            .unwrap()
+            .map(|i| i.phase)
+            .as_deref(),
+        Some("mapping_retired")
     );
     assert!(thread_channels(&db, "thread-old").unwrap().is_none());
 }
@@ -27,7 +30,7 @@ async fn completion_write_failure_cannot_authorize_a_second_delete() {
     Connection::open(&db)
         .unwrap()
         .execute_batch(
-            "CREATE TRIGGER completion_failure BEFORE UPDATE ON cdr_cleanup_fences
+            "CREATE TRIGGER completion_failure BEFORE UPDATE ON cdr_archived_room_dispositions
          WHEN NEW.phase='deleted' BEGIN SELECT RAISE(ABORT,'injected completion failure'); END;",
         )
         .unwrap();
@@ -36,15 +39,18 @@ async fn completion_write_failure_cannot_authorize_a_second_delete() {
     remote.0.lock().unwrap().before_delete = Some(Arc::new(move |_| {
         count.fetch_add(1, Ordering::SeqCst);
     }));
-    assert!(sync.sync(99, None).await.is_err());
+    assert!(!sync.sync(99, None).await.unwrap().skipped.is_empty());
     assert!(!remote.0.lock().unwrap().channels.contains_key(&31));
     assert!(thread_channels(&db, "thread-old").unwrap().is_some());
     assert_eq!(
-        room_cleanup::phase(&db, 31).unwrap().as_deref(),
-        Some("deleting")
+        cdr_store::archived_cleanup::get(&db, 31)
+            .unwrap()
+            .map(|i| i.phase)
+            .as_deref(),
+        Some("delete_attempted")
     );
     assert_eq!(audit_count(&db), 1);
-    assert!(sync.sync(99, None).await.is_err());
+    assert!(!sync.sync(99, None).await.unwrap().skipped.is_empty());
     assert_eq!(deletes.load(Ordering::SeqCst), 1);
 }
 
@@ -76,7 +82,7 @@ async fn ingress_arriving_after_archived_close_is_saved_but_cannot_execute() {
     sync.sync(99, None).await.unwrap();
     let late = ingress::get(&db, "message:900").unwrap().unwrap();
     assert_eq!(late.state, "held");
-    assert_eq!(late.phase, "cleanup_fenced");
+    assert_eq!(late.phase, "cleanup_retired");
     assert!(!ingress::begin_execution(&db, "message:900", "processing", None, 31.0).unwrap());
     assert_eq!(late.payload["text"], "late");
 }

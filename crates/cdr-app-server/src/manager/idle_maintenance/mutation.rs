@@ -9,6 +9,7 @@ pub(super) struct Attempt<'a> {
     params: &'a Value,
     id: String,
     wire: Mutex<Option<RequestId>>,
+    effect: Mutex<Option<Box<dyn Send + Sync>>>,
 }
 
 impl<'a> Attempt<'a> {
@@ -19,12 +20,17 @@ impl<'a> Attempt<'a> {
             params,
             id: uuid::Uuid::new_v4().to_string(),
             wire: Mutex::new(None),
+            effect: Mutex::new(None),
         }
     }
 
     pub(super) fn begin(&self, wire: &RequestId) -> Result<(), AppServerError> {
         if is_observational(self.method) {
             return Ok(());
+        }
+        if let Some(fence) = &self.work.fence {
+            *self.effect.lock().expect("maintenance effect permit") =
+                fence.admit_effect(self.method, self.params)?;
         }
         if let Some(fence) = &self.work.fence
             && fence.begin_mutation_with_origin(

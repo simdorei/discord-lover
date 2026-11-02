@@ -1,5 +1,7 @@
 //! Migration keeps legacy pending data but cannot invent cross-generation proof.
 use cdr_store::{async_question as aq, queue, schema::open_initialized};
+#[path = "support/legacy_schema.rs"]
+mod legacy_schema;
 
 #[test]
 fn legacy_candidate_keeps_original_generation_only_and_never_inherits_by_migration() {
@@ -43,8 +45,9 @@ fn legacy_candidate_keeps_original_generation_only_and_never_inherits_by_migrati
         )
         .unwrap();
         let id = aq::occurrence_id("thread", "T2", "item", 0).unwrap();
-        open_initialized(&db)
-            .unwrap()
+        let legacy = open_initialized(&db).unwrap();
+        legacy_schema::remove_retirement_guards(&legacy);
+        legacy
             .execute_batch(
                 "ALTER TABLE cdr_async_question_inbox DROP COLUMN candidate_generation;
              ALTER TABLE cdr_async_question_inbox DROP COLUMN candidate_execution_generation;

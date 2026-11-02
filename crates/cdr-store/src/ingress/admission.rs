@@ -92,6 +92,13 @@ pub(super) fn admit_recorded_in(
         &request,
         runtime_id.as_deref(),
     )?;
+    if crate::archived_cleanup::blocked_in(
+        connection,
+        Some(request.channel_id),
+        request.target_thread_id.as_deref(),
+    )? {
+        connection.execute("UPDATE discord_ingress_journal SET state='held',phase='cleanup_retired',hold_reason='archived mirror cleanup; original request preserved without execution' WHERE ingress_id=?",[&request.ingress_id])?;
+    }
     if request.kind == IngressKind::Message {
         connection.execute(
             "INSERT INTO discord_processed_messages (message_id,seen_at) VALUES (?,?)",

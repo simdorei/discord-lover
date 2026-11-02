@@ -122,7 +122,7 @@ pub(crate) fn select_job(connection: &Connection, job_id: &str) -> Result<Stored
 pub(crate) fn all_jobs(connection: &Connection) -> Result<Vec<StoredQueueJob>> {
     query_jobs(
         connection,
-        &format!("SELECT {COLUMNS} FROM codex_turn_queue ORDER BY created_at, job_id"),
+        &format!("SELECT {COLUMNS} FROM cdr_live_codex_turn_queue ORDER BY created_at, job_id"),
     )
 }
 
@@ -149,19 +149,19 @@ pub fn list_filtered(
     {
         (Some(target), Some(value)) => (
             format!(
-                "SELECT {COLUMNS} FROM codex_turn_queue WHERE target_thread_id = ? AND app_server_generation = ? ORDER BY created_at, job_id"
+                "SELECT {COLUMNS} FROM cdr_live_codex_turn_queue WHERE target_thread_id = ? AND app_server_generation = ? ORDER BY created_at, job_id"
             ),
             vec![target.to_owned().into(), value.into()],
         ),
         (Some(target), None) => (
             format!(
-                "SELECT {COLUMNS} FROM codex_turn_queue WHERE target_thread_id = ? ORDER BY created_at, job_id"
+                "SELECT {COLUMNS} FROM cdr_live_codex_turn_queue WHERE target_thread_id = ? ORDER BY created_at, job_id"
             ),
             vec![target.to_owned().into()],
         ),
         (None, Some(value)) => (
             format!(
-                "SELECT {COLUMNS} FROM codex_turn_queue WHERE app_server_generation = ? ORDER BY created_at, job_id"
+                "SELECT {COLUMNS} FROM cdr_live_codex_turn_queue WHERE app_server_generation = ? ORDER BY created_at, job_id"
             ),
             vec![value.into()],
         ),
