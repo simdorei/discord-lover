@@ -303,7 +303,10 @@ async fn stalled_http_releases_cleanup_permit_and_preserves_unknown_receipt() {
             .await
             .unwrap();
     let error = result.unwrap_err().to_string();
-    assert!(error.contains("deadline expired") || error.contains("send outcome unconfirmed"), "{error}");
+    assert!(
+        error.contains("deadline expired") || error.contains("send outcome unconfirmed"),
+        "{error}"
+    );
     assert_eq!(
         cdr_store::archived_cleanup::effects::in_flight(&db, 31, "old").unwrap(),
         0
