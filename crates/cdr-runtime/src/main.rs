@@ -20,6 +20,10 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<(), (u8, String)> {
     let raw_args: Vec<_> = std::env::args_os().skip(1).collect();
+    if raw_args.len() == 1 && raw_args[0] == "--build-info" {
+        println!("{}", cdr_runtime::build_info::JSON);
+        return Ok(());
+    }
     #[cfg(windows)]
     if raw_args.len() == 1 && raw_args[0] == "--agy-control" {
         return cdr_runtime::agy::control::cli()

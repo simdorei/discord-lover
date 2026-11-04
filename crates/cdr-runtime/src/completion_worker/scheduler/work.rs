@@ -35,7 +35,7 @@ pub(super) fn prepare<'a>(
         super::lanes::StateWork::Durable(entry) if entry.source == Source::Observed => {
             Some(entry.turn.clone())
         }
-        super::lanes::StateWork::Durable(_) => None,
+        super::lanes::StateWork::Durable(_) | super::lanes::StateWork::WriterRetry(_) => None,
     };
     let owner = if let Some(turn) = turn {
         cdr_store::queue::list_filtered(worker.queue.db_path(), Some(item.target()), None)?

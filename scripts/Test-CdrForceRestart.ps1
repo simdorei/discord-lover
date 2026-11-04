@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([Parameter(Mandatory)][string]$RuntimeBinary)
 $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path -Parent $PSScriptRoot
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('cdr-force-test-' + [guid]::NewGuid().ToString('N'))
@@ -8,6 +8,7 @@ $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('cdr-force-test-' + [guid]::Ne
 . (Join-Path $sourceRoot 'codex-discord-rust-drain.ps1')
 . (Join-Path $sourceRoot 'scripts/CdrLaunchJournal.ps1')
 . (Join-Path $sourceRoot 'scripts/CdrForceRestart.ps1')
+Import-Module (Join-Path $sourceRoot 'scripts/CdrRuntimeIdentity.psm1') -Force
 # Load the real watchdog's pure identity function without executing its entry.
 $tokens=$null; $errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceRoot 'codex-discord-rust-watchdog.ps1'),[ref]$tokens,[ref]$errors)
@@ -80,6 +81,7 @@ try {
     # Exercise the production transaction with offline process/launch providers.
     $RepoRoot=Join-Path $testRoot 'transaction'; [void][IO.Directory]::CreateDirectory($RepoRoot)
     $BinaryPath=Join-Path $RepoRoot 'cdr-runtime.exe'; $EnvPath=Join-Path $RepoRoot '.env'
+    Copy-Item -LiteralPath $RuntimeBinary -Destination $BinaryPath
     $DisablePath=Join-Path $RepoRoot '.codex_discord_bot.disabled'
     [IO.File]::WriteAllText($EnvPath,'fixture=1')
     [IO.File]::WriteAllText((Join-Path $RepoRoot '.codex_discord_rust.drain.prepare'),'waiting forever')
@@ -145,6 +147,11 @@ try {
     $entryRoot=Join-Path $testRoot 'entry'; [void][IO.Directory]::CreateDirectory($entryRoot)
     [void][IO.Directory]::CreateDirectory((Join-Path $entryRoot 'scripts'))
     Copy-Item -LiteralPath (Join-Path $sourceRoot 'scripts/CdrForceRestart.ps1') -Destination (Join-Path $entryRoot 'scripts')
+    foreach($file in @('CdrRuntimeIdentity.psm1','CdrBuildProvenance.psm1','CdrNativeProcess.psm1','CdrAsyncRecoveryCompatibility.ps1')) {
+        Copy-Item -LiteralPath (Join-Path $sourceRoot ('scripts/'+$file)) -Destination (Join-Path $entryRoot 'scripts')
+    }
+    [void][IO.Directory]::CreateDirectory((Join-Path $entryRoot 'target/release'))
+    Copy-Item -LiteralPath $RuntimeBinary -Destination (Join-Path $entryRoot 'target/release/cdr-runtime.exe')
     $entryPath=Join-Path $sourceRoot 'codex-discord-rust-restart.ps1'
     $entryText=[IO.File]::ReadAllText($entryPath)
     $entryAst=[Management.Automation.Language.Parser]::ParseFile($entryPath,[ref]$tokens,[ref]$errors)
@@ -152,8 +159,10 @@ try {
     $entryText=$entryText.Replace($provider.Extent.Text,"function Get-VerifiedRustIdentity { return '42|99' }")
     [IO.File]::WriteAllText((Join-Path $entryRoot 'codex-discord-rust-restart.ps1'),$entryText)
     $watchdogStub=@'
-param($RepoRoot,$BinaryPath,[switch]$ForceRestart,$ExpectedRuntimeIdentity,[switch]$DryRun)
+param($RepoRoot,$BinaryPath,[switch]$ForceRestart,$ExpectedRuntimeIdentity,$ExpectedBinaryHash,$ExpectedSourceCommit,[switch]$DryRun)
 if (-not $ForceRestart -or $ExpectedRuntimeIdentity -ne '42|99') { throw 'Force route lost identity or mode' }
+Import-Module (Join-Path $RepoRoot 'scripts/CdrRuntimeIdentity.psm1')
+$null=Get-CdrRuntimeArtifact $BinaryPath $ExpectedBinaryHash
 Write-Output 'force_entry_verified'
 exit 0
 '@
@@ -179,16 +188,17 @@ exit 0
 
     $workerReceipt=Join-Path $entryRoot 'independent-worker.json'
     $workerStub=@'
-param($RepoRoot,[switch]$Force,[switch]$ForceWorker,$ExpectedBotIdentity)
+param($RepoRoot,[switch]$Force,[switch]$ForceWorker,$ExpectedBotIdentity,$ExpectedBinaryHash,$ExpectedSourceCommit)
 $me=Get-CimInstance Win32_Process -Filter "ProcessId = $PID"
-$record=@{Force=[bool]$Force;Worker=[bool]$ForceWorker;Identity=$ExpectedBotIdentity;Pid=$PID;Parent=$me.ParentProcessId}
+$record=@{Force=[bool]$Force;Worker=[bool]$ForceWorker;Identity=$ExpectedBotIdentity;Hash=$ExpectedBinaryHash;Commit=$ExpectedSourceCommit;Pid=$PID;Parent=$me.ParentProcessId}
 [IO.File]::WriteAllText((Join-Path $RepoRoot 'independent-worker.json'),($record | ConvertTo-Json -Compress))
 '@
     [IO.File]::WriteAllText((Join-Path $entryRoot 'codex-discord-rust-restart.ps1'),$workerStub)
-    $worker=Start-CdrDetachedForceRestart -Root $entryRoot -Identity '42|99'
+    $worker=Start-CdrDetachedForceRestart -Root $entryRoot -Identity '42|99' -ExpectedBinaryHash ('A'*64) -ExpectedSourceCommit ('b'*40)
     Wait-File $workerReceipt
     $received=[IO.File]::ReadAllText($workerReceipt) | ConvertFrom-Json
     Assert-True ($received.Force -and $received.Worker -and $received.Identity -ceq '42|99') 'Independent worker lost force parameters'
+    Assert-True ($received.Hash -ceq ('A'*64) -and $received.Commit -ceq ('b'*40)) 'Independent worker lost artifact pins'
     Assert-True ($received.Pid -eq $worker -and $received.Parent -ne $PID) 'Worker did not detach from requesting process'
     Write-Output 'PASS independent OS worker receives force request outside caller ancestry'
     Write-Output 'force_restart_tests_passed'

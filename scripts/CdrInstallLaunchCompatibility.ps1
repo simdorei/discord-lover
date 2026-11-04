@@ -74,7 +74,8 @@ function Add-CdrReviewedLaunchPins {
         'codex-discord-rust-drain.ps1','scripts/CdrAsyncRecoveryCompatibility.ps1',
         'scripts/CdrRuntimeLaunchCompatibility.ps1','scripts/CdrDeploymentRecovery.ps1',
         'scripts/CdrLaunchJournal.ps1','scripts/CdrRestartTransaction.ps1',
-        'scripts/CdrForceRestart.ps1')
+        'scripts/CdrForceRestart.ps1','scripts/CdrRestartPreparation.ps1',
+        'scripts/CdrRuntimeIdentity.psm1','scripts/CdrBuildProvenance.psm1','scripts/CdrNativeProcess.psm1')
     if ($decl.protocol -cne 'cdr-runtime-launch-artifacts-v1' -or
         @($decl.files).Count -ne $required.Count) {
         throw 'Reviewed launch artifact inventory is incomplete'

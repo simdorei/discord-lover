@@ -1,7 +1,7 @@
 Import-SourceFunctions 'codex-discord-rust-restart.ps1' | ForEach-Object {Invoke-Expression $_}
 $Watchdog=Join-Path $RepoRoot 'watchdog.ps1'
 [IO.File]::WriteAllText($Watchdog,@'
-param($RepoRoot,$BinaryPath,$RestartQuietSeconds,$RestartWaitTimeoutSeconds,$CompleteRestartFenceJson)
+param($RepoRoot,$BinaryPath,$RestartQuietSeconds,$RestartWaitTimeoutSeconds,$CompleteRestartFenceJson,$ExpectedBinaryHash,$ExpectedSourceCommit)
 if(-not $CompleteRestartFenceJson){throw 'unbound general watchdog used'}
 $f=$CompleteRestartFenceJson | ConvertFrom-Json
 if($f.ProcessIdentity -ne '42|99' -or $f.Nonce -ne 'owned'){throw 'wrong authorization'}

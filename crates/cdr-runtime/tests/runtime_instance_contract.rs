@@ -17,6 +17,31 @@ fn duplicate_runtime_is_rejected_and_stale_marker_is_recoverable() {
     let first = RuntimeInstanceGuard::acquire(temp.path()).unwrap();
     let marker = fs::read_to_string(&lock_path).unwrap();
     assert!(marker.contains(&format!("pid={}", std::process::id())));
+    let startup: serde_json::Value = serde_json::from_str(
+        marker
+            .lines()
+            .find_map(|line| line.strip_prefix("startup="))
+            .unwrap(),
+    )
+    .unwrap();
+    let executable = std::env::current_exe().unwrap();
+    assert_eq!(
+        startup["artifact_sha256"],
+        cdr_runtime::build_info::artifact_sha256(&executable).unwrap()
+    );
+    assert_eq!(
+        startup["executable_path"],
+        executable.to_string_lossy().as_ref()
+    );
+    assert_eq!(
+        startup["build_info"],
+        serde_json::from_str::<serde_json::Value>(cdr_runtime::build_info::JSON).unwrap()
+    );
+    #[cfg(windows)]
+    assert_eq!(
+        startup["process_identity"],
+        cdr_windows_native::current_process_identity().unwrap()
+    );
     assert!(matches!(
         RuntimeInstanceGuard::acquire(temp.path()),
         Err(RuntimeInstanceError::AlreadyRunning)

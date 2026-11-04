@@ -14,6 +14,8 @@ param(
     [string]$MaintenanceStatePath,
     [string]$ExpectedMaintenanceOperation,
     [string]$ExpectedRuntimeIdentity,
+    [string]$ExpectedBinaryHash,
+    [string]$ExpectedSourceCommit,
     [int]$RestartQuietSeconds = 90,
     [int]$RestartWaitTimeoutSeconds = 900,
     [int]$HealthCpuPercent = 95,
@@ -61,8 +63,10 @@ if (-not (Test-Path -LiteralPath $DrainSupportPath -PathType Leaf)) {
 . (Join-Path $SupportRoot 'scripts/CdrDeploymentRecovery.ps1')
 . (Join-Path $SupportRoot 'scripts/CdrLaunchJournal.ps1')
 . (Join-Path $SupportRoot 'scripts/CdrRestartTransaction.ps1')
+. (Join-Path $SupportRoot 'scripts/CdrRestartPreparation.ps1')
 . (Join-Path $SupportRoot 'scripts/CdrForceRestart.ps1')
 . (Join-Path $SupportRoot 'scripts/CdrMaintenanceCompatibility.ps1')
+Import-Module (Join-Path $SupportRoot 'scripts/CdrRuntimeIdentity.psm1') -Force
 
 if (
     $HealthCpuPercent -ne 95 -or
@@ -318,6 +322,11 @@ function Start-RustRuntime {
     $quotedEnv = '"' + $EnvPath.Replace('"', '\"') + '"'
     $resumeName = 'CODEX_REMOTE_MCP_RESTART_RESUME'
     $previousResume = [Environment]::GetEnvironmentVariable($resumeName, 'Process')
+    $launchRecord=if($script:CdrLaunchJournalPath){Read-CdrLaunchJournal $script:CdrLaunchJournalPath}else{$null}
+    $launchHash=if($null -ne $launchRecord -and $launchRecord.ArtifactHash){$launchRecord.ArtifactHash}else{$ExpectedBinaryHash}
+    $launchArtifact=Get-CdrRuntimeArtifact $BinaryPath $launchHash $ExpectedSourceCommit
+    if ($null -ne $launchRecord -and $launchRecord.PSObject.Properties['RequireStartupRecord']) { $launchArtifact=$launchRecord }
+    $artifactPin=Get-CdrRuntimeArtifactPin $BinaryPath $launchArtifact.ArtifactHash
     try {
         $resumeValue = if ($ResumeRemoteMcp) { '1' } else { $null }
         [Environment]::SetEnvironmentVariable($resumeName, $resumeValue, 'Process')
@@ -345,6 +354,8 @@ function Start-RustRuntime {
             }
             $verified = Get-VerifiedRuntimeProcess
             if ($null -ne $verified -and [int]$verified.Id -eq $process.Id) {
+                Wait-CdrReplacementReady -ExpectedIdentity (Get-RustProcessIdentity $verified) -Artifact $launchArtifact `
+                    -TimeoutSeconds ([int][math]::Max(0,[math]::Min(15,($deadline-[DateTimeOffset]::UtcNow).TotalSeconds)))
                 Write-RustWatchdogLog "started identity=$(Get-RustProcessIdentity -Process $verified)"
                 # Memory only: UI work must not spend the maintenance launch budget.
                 $script:CdrTrayStartedIdentity = Get-RustProcessIdentity -Process $verified
@@ -355,6 +366,7 @@ function Start-RustRuntime {
         throw "Rust runtime did not publish its verified lock marker within 15 seconds: pid=$($process.Id)"
         }
     } finally {
+        $artifactPin.Dispose()
         [Environment]::SetEnvironmentVariable($resumeName, $previousResume, 'Process')
     }
 }
@@ -413,14 +425,32 @@ if ($null -ne $pendingRestart) {
         throw 'Completion request differs from the pending launch journal'
     }
     if ($DryRun) { Write-Output 'restart_transaction_pending'; exit 0 }
-    Invoke-CdrRestartTransaction -Fence $pendingRestart.Fence
-    exit 0
+    if ($ExpectedBinaryHash -and $pendingRestart.ArtifactHash -cne $ExpectedBinaryHash.ToUpperInvariant()) { throw 'Restart artifact differs from the pending journal.' }
+    if ($pendingRestart.ArtifactHash) { $null=Get-CdrRuntimeArtifact $BinaryPath $pendingRestart.ArtifactHash $ExpectedSourceCommit }
+    if ($pendingRestart.Phase -eq 'preparing' -and [IO.File]::Exists($RestartPath)) {
+        Complete-CdrRestartPreparation $pendingRestart
+    }
+    if ($pendingRestart.Phase -eq 'preparing') {
+        $PrepareRestart=$true
+        $ExpectedRuntimeIdentity=$pendingRestart.Fence.ProcessIdentity
+    } else {
+        if ($pendingRestart.Phase -eq 'prepared') {
+            $old=Get-VerifiedRuntimeProcess
+            if ($old -and (Get-RustProcessIdentity $old) -ceq $pendingRestart.Fence.ProcessIdentity) {
+                # A prepared journal precedes the old process's normal exit.
+                Complete-CdrRestartPreparation $pendingRestart
+                Wait-RustRuntimeExit $old $pendingRestart.Fence.ProcessIdentity 'restart_requested'
+            }
+        }
+        Invoke-CdrRestartTransaction -Fence $pendingRestart.Fence
+        exit 0
+    }
 }
 $completionFence = $null
 Assert-CdrNoOrphanRestartClaim -Root $RepoRoot
 if ($CompleteRestartFenceJson) {
     $completionFence = $CompleteRestartFenceJson | ConvertFrom-Json
-    if (Test-CdrRestartCompleted -Fence $completionFence) {
+    if (Test-CdrRestartCompleted -Fence $completionFence -ExpectedBinaryHash $ExpectedBinaryHash -ExpectedSourceCommit $ExpectedSourceCommit) {
         Write-Output 'restart_completed_verified'
         exit 0
     }
@@ -454,9 +484,13 @@ if ($CheckRestartReady -or $PrepareRestart) {
     if (-not $health.Healthy -or $health.Bootstrap) {
         throw "Rust runtime heartbeat is not ready: state=$($health.State)"
     }
+    $preparation=if($PrepareRestart){New-CdrRestartPreparation $running $runningIdentity}else{$null}
+    $preparationPin=if($preparation){Get-CdrRuntimeArtifactPin $BinaryPath $preparation.ArtifactHash}else{$null}
+    try {
     $fence = Enter-RestartDrain -Process $running `
         -ExpectedProcessIdentity $runningIdentity `
-        -TimeoutSeconds $RestartWaitTimeoutSeconds
+        -TimeoutSeconds $RestartWaitTimeoutSeconds `
+        -PreparedFence $(if($preparation){$preparation.Fence}else{$null})
     Assert-RestartDrainBound -Fence $fence -ExpectedProcessIdentity $runningIdentity
     Wait-RustThreadsQuietForRestart
     Assert-RestartDrainBound -Fence $fence -ExpectedProcessIdentity $runningIdentity
@@ -469,11 +503,13 @@ if ($CheckRestartReady -or $PrepareRestart) {
     }
     if ($PrepareRestart) {
         Write-BoundRestartMarker -Fence $fence
+        Complete-CdrRestartPreparation $preparation
         Write-Output 'restart_prepare_ok'
         Write-Output ('restart_prepare_fence=' + ($fence | ConvertTo-Json -Compress))
     } else {
         Write-Output 'restart_check_ok runtime_remains_sealed=true'
     }
+    } finally { if($preparationPin){$preparationPin.Dispose()} }
     exit 0
 }
 
@@ -559,12 +595,17 @@ if ($restart) {
 }
 
 if ($unhealthy) {
+    $unhealthyArtifact=Get-CdrRuntimeArtifact $BinaryPath $ExpectedBinaryHash $ExpectedSourceCommit
+    $ExpectedBinaryHash=$unhealthyArtifact.ArtifactHash
+    $unhealthyPin=Get-CdrRuntimeArtifactPin $BinaryPath $ExpectedBinaryHash
+    try {
     Write-RustWatchdogLog "restart reason=stale_heartbeat identity=$runningIdentity state=$($health.State)"
     Stop-VerifiedRuntime -Process $running -ExpectedIdentity $runningIdentity
     if ((Get-VerifiedRuntimeIdentity) -eq $runningIdentity) {
         throw "Unhealthy Rust runtime remained alive: identity=$runningIdentity"
     }
     Start-RustRuntime
+    } finally { $unhealthyPin.Dispose() }
     $script:CdrTrayPollAllowed = $true
     exit 0
 }

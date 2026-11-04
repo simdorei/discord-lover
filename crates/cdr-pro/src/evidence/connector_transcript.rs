@@ -12,7 +12,7 @@ pub const CONNECTOR_PROTOCOL: &str = "ask-chatgpt-pro-connector-control-v1";
 pub const CONNECTOR_NAME: &str = "Simdorei Local Project Oauth";
 pub const CONNECTOR_PATH: &str = "/plugins/plugin_asdk_app_6a6ae90be0a08191b877eddba93b631c";
 pub const CONNECTOR_PROBE_SHA256: &str =
-    "5e61fbefe46be33a0359c4e3acf51ac6fea19cd9cc83b257978d55c5c151b62d";
+    "2f08efddcaeede9b7272e7bd17ea66126c7955324421f25e7b35163a3453aca3";
 const PROBE_PATH: &str = "skills/ask-chatgpt-pro/scripts/pro_connector_control.mjs";
 
 pub struct TranscriptEvidence {

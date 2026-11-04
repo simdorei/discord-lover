@@ -105,6 +105,7 @@ impl<B: TurnBackend> QueueCoordinator<B> {
                 decision.error, decision.suppressed
             );
         }
+        self.extend_writer_retry_gate(target)?;
         Ok(())
     }
 

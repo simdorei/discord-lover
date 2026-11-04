@@ -5,9 +5,11 @@ function Read-CdrLaunchJournal {
     if (-not [IO.File]::Exists($Path)) { return $null }
     $record = [IO.File]::ReadAllText($Path) | ConvertFrom-Json
     if ($record.BinaryPath -cne $BinaryPath -or $record.Version -ne 1 -or
-        $record.Phase -notin @('prepared', 'launching', 'child')) {
+        $record.Phase -notin @('preparing', 'prepared', 'launching', 'child')) {
         throw 'Invalid launch journal preserved'
     }
+    if ($record.ArtifactHash -and $record.ArtifactHash -cnotmatch '^[A-F0-9]{64}$') { throw 'Invalid launch artifact hash preserved' }
+    if ($record.Phase -eq 'preparing' -and (-not $record.ArtifactHash -or $null -eq $record.Fence)) { throw 'Incomplete preparing journal preserved' }
     if ($record.ClaimPath) {
         $claim = [IO.Path]::GetFullPath($record.ClaimPath)
         if ([IO.Path]::GetDirectoryName($claim) -cne $RepoRoot -or
@@ -24,7 +26,8 @@ function Save-CdrLaunchJournal {
 }
 
 function New-CdrLaunchJournal {
-    param([string]$Path, [string]$Operation, $Fence = $null, [string]$ArtifactHash)
+    param([string]$Path, [string]$Operation, $Fence = $null, [string]$ArtifactHash,
+        $Artifact=$null, [ValidateSet('preparing','prepared')][string]$Phase='prepared')
     $record = Read-CdrLaunchJournal $Path
     if ($null -ne $record) {
         if ($record.Operation -cne $Operation -or
@@ -36,8 +39,12 @@ function New-CdrLaunchJournal {
     }
     $record = [pscustomobject]@{
         Version=1; BinaryPath=$BinaryPath; Operation=$Operation; Fence=$Fence
-        Phase='prepared'; ChildIdentity=''; ClaimPath=''
+        Phase=$Phase; ChildIdentity=''; ClaimPath=''
         ArtifactHash=$ArtifactHash
+    }
+    if ($null -ne $Artifact) {
+        $record | Add-Member NoteProperty BuildInfo $Artifact.BuildInfo
+        $record | Add-Member NoteProperty RequireStartupRecord $Artifact.RequireStartupRecord
     }
     Save-CdrLaunchJournal $Path $record
     return $record
@@ -69,6 +76,7 @@ function Get-CdrRecordedChild {
     if ($Record.Phase -eq 'launching') {
         throw 'launch_outcome_unknown: child creation was not durably recorded; no automatic duplicate launch'
     }
+    if ($Record.Phase -eq 'preparing') { throw 'Restart preparation is incomplete; launch is not authorized' }
     if ($Record.Phase -eq 'prepared') { return $null }
     if ($Record.ChildIdentity -notmatch '^(\d+)\|\d+$') { throw 'Invalid recorded child identity' }
     $childPid = [int]$Matches[1]

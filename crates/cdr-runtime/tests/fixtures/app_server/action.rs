@@ -20,6 +20,17 @@ pub(super) fn run() -> Result {
     serve(Path::new(&log), Logging::Requests, |request| {
         let params = &request["params"];
         let thread = params["threadId"].as_str().unwrap_or("");
+        if method(&request) == "thread/resume"
+            && thread == "writer-fast"
+            && let Ok(path) = std::env::var("CDR_WRITER_RELEASE_PATH")
+            && !Path::new(&path).exists()
+        {
+            return error(
+                &request,
+                -32600,
+                "thread writer-fast already has an active writer",
+            );
+        }
         let result = match method(&request) {
             "initialize" => json!({"userAgent":"action-test/1"}),
             "test/new-recovery-mode" => {

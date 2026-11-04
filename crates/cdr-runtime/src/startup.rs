@@ -160,7 +160,7 @@ pub fn config_summary(config: &RuntimeConfig) -> String {
 
 #[must_use]
 pub fn help_text() -> &'static str {
-    "Codex Discord Remote Rust runtime\n\nOptions:\n  --no-message-content               Use slash commands only\n  --check-config                     Validate configuration without connecting\n  --backup-store                     Create and verify an online cutover DB snapshot\n  --restart-readiness                Wait for fail-closed Rust restart readiness\n  --restart-quiet-seconds N          Required idle age for restart (default: 90)\n  --restart-wait-timeout-seconds N   Maximum quiet wait (default: 900)\n  --env PATH                         Load a specific environment file\n  -h, --help                         Show this help"
+    "Codex Discord Remote Rust runtime\n\nOptions:\n  --build-info                       Print embedded build provenance (standalone; no environment or DB)\n  --no-message-content               Use slash commands only\n  --check-config                     Validate configuration without connecting\n  --backup-store                     Create and verify an online cutover DB snapshot\n  --restart-readiness                Wait for fail-closed Rust restart readiness\n  --restart-quiet-seconds N          Required idle age for restart (default: 90)\n  --restart-wait-timeout-seconds N   Maximum quiet wait (default: 900)\n  --env PATH                         Load a specific environment file\n  -h, --help                         Show this help"
 }
 
 fn process_environment() -> BTreeMap<String, String> {

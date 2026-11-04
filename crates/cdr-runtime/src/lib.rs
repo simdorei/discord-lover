@@ -15,6 +15,7 @@ mod async_orphan_tests;
 mod async_question_ui;
 pub mod attachments;
 pub mod bridge_state;
+pub mod build_info;
 mod cleanup_refusal;
 pub mod command_plan;
 pub mod commentary_stream;

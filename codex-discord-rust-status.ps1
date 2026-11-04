@@ -5,6 +5,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Import-Module (Join-Path $PSScriptRoot 'scripts/CdrRuntimeIdentity.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'scripts/CdrBuildProvenance.psm1') -Force
 $RepoRoot = [IO.Path]::GetFullPath($RepoRoot)
 if ([string]::IsNullOrWhiteSpace($BinaryPath)) {
     $BinaryPath = Join-Path $RepoRoot 'target\release\cdr-runtime.exe'
@@ -62,6 +64,21 @@ $processStatus = if ($verified) {
     'not found or identity mismatch'
 }
 Write-Output "bot_process: $processStatus"
+$startup=$null
+if ($verified) {
+    $ticks=$process.StartTime.ToUniversalTime().Ticks; $ticks-=($ticks % 10)
+    try { $startup=Read-CdrRuntimeStartup $RepoRoot $BinaryPath "$runtimePid|$ticks" }
+    catch { Write-Output "running_provenance_error: $($_.Exception.Message)" }
+}
+Write-Output ('running_build: ' + $(if($startup){$startup | ConvertTo-Json -Depth 5 -Compress}else{'unknown; no matching process-bound startup record'}))
+try {
+    $artifact=Get-CdrRuntimeArtifact $BinaryPath
+    Write-Output ('on_disk_artifact: ' + ($artifact | ConvertTo-Json -Depth 5 -Compress))
+} catch { Write-Output "on_disk_artifact_error: $($_.Exception.Message)" }
+try {
+    $checkout=Get-CdrBuildSourceState $RepoRoot
+    Write-Output "checkout_source: $($checkout.Input)"
+} catch { Write-Output 'checkout_source: unknown (not a readable Git checkout)' }
 if (Test-Path -LiteralPath $HeartbeatPath) {
     $age = [math]::Round(((Get-Date) - (Get-Item -LiteralPath $HeartbeatPath).LastWriteTime).TotalSeconds, 1)
     Write-Output "heartbeat_age_seconds: $age"

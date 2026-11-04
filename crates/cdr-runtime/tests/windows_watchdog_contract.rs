@@ -25,7 +25,7 @@ fn run_watchdog(
         if entry
             .path()
             .extension()
-            .is_some_and(|extension| extension == "ps1")
+            .is_some_and(|extension| extension == "ps1" || extension == "psm1")
         {
             fs::copy(entry.path(), root.join("scripts").join(entry.file_name())).unwrap();
         }

@@ -5,6 +5,7 @@ $source=Get-Content (Join-Path $root 'codex-discord-rust-watchdog.ps1') -Raw
 $boundary=$source.IndexOf('# CONTROL_ENTRY:')
 . ([scriptblock]::Create($source.Substring(0,$boundary))) -RepoRoot $root -BinaryPath (Join-Path $root 'probe.exe') -PrepareRestart:$Prepare
 $entry=[scriptblock]::Create($source.Substring($boundary))
+. (Join-Path $PSScriptRoot 'artifact.ps1')
 $script:newAlive=$false;$script:starts=0
 function Get-VerifiedRuntimeProcess {if($script:newAlive){[pscustomobject]@{Id=77;Path=$BinaryPath}}}
 function Get-RustProcessIdentity {param($Process) if($Process){"$($Process.Id)|99"}else{''}}

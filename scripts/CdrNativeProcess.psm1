@@ -47,7 +47,8 @@ function ConvertTo-WindowsNativeArgument {
 
 function Invoke-CdrNative {
     param([string]$Executable, [string[]]$Arguments, [AllowNull()][string]$InputText,
-        [int]$TimeoutSeconds = 120, [hashtable]$EnvironmentOverrides = @{}, [ref]$ProcessIdentity)
+        [int]$TimeoutSeconds = 120, [hashtable]$EnvironmentOverrides = @{}, [ref]$ProcessIdentity,
+        [string]$WorkingDirectory)
 
     if ($PSBoundParameters.ContainsKey('ProcessIdentity')) { $ProcessIdentity.Value = $null }
 
@@ -62,6 +63,7 @@ function Invoke-CdrNative {
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
+    if ($WorkingDirectory) { $startInfo.WorkingDirectory = [IO.Path]::GetFullPath($WorkingDirectory) }
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $startInfo.RedirectStandardInput = $PSBoundParameters.ContainsKey('InputText')

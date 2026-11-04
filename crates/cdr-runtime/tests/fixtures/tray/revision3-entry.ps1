@@ -54,6 +54,9 @@ function Enter-RestartDrain {param($Process,$ExpectedProcessIdentity,$TimeoutSec
 function Assert-RestartDrainBound {param($Fence,$ExpectedProcessIdentity)}
 function Wait-RustThreadsQuietForRestart {}
 function Write-BoundRestartMarker {param($Fence)}
+function New-CdrRestartPreparation {param($Process,$Identity);[pscustomobject]@{ArtifactHash='fixture';Fence=@{}}}
+function Complete-CdrRestartPreparation {param($Record)}
+function Get-CdrRuntimeArtifactPin {param($Path,$ExpectedHash);$pin=[pscustomobject]@{};$pin|Add-Member ScriptMethod Dispose {};return $pin}
 function Write-RustWatchdogLog {param($Message)}
 function Wait-RustRuntimeExit {param($Process,$ExpectedIdentity,$Reason)}
 function Clear-DeadRuntimeArtifacts {}

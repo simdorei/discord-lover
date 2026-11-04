@@ -18,7 +18,11 @@ impl PausedUpgrade {
         for directory in ["", "scripts"] {
             for file in fs::read_dir(repo().join(directory)).unwrap() {
                 let file = file.unwrap();
-                if file.path().extension().is_some_and(|e| e == "ps1") {
+                if file
+                    .path()
+                    .extension()
+                    .is_some_and(|e| e == "ps1" || e == "psm1")
+                {
                     fs::copy(file.path(), source.join(directory).join(file.file_name())).unwrap();
                 }
             }

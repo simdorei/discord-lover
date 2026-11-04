@@ -59,12 +59,27 @@ impl RuntimeInstanceGuard {
         let socket_path = lock_path.with_extension("socket");
         #[cfg(unix)]
         let socket = acquire_unix(&socket_path)?;
+        let executable = std::env::current_exe().map_err(|source| io_error(&lock_path, source))?;
+        let hash = crate::build_info::artifact_sha256(&executable)
+            .map_err(|source| io_error(&executable, source))?;
+        #[cfg(windows)]
+        let process_identity = cdr_windows_native::current_process_identity()
+            .map_err(RuntimeInstanceError::Windows)?;
+        #[cfg(not(windows))]
+        let process_identity = "unknown";
+        let startup = serde_json::json!({
+            "schema_version": 1, "process_identity": process_identity,
+            "executable_path": executable, "artifact_sha256": hash,
+            "build_info": serde_json::from_str::<serde_json::Value>(crate::build_info::JSON)
+                .expect("validated build metadata"),
+        });
         write_marker(
             &lock_path,
             &format!(
-                "pid={}\nstarted_at={}\n",
+                "pid={}\nstarted_at={}\nstartup={}\n",
                 std::process::id(),
-                unix_seconds()?
+                unix_seconds()?,
+                startup,
             ),
         )?;
         Ok(Self {

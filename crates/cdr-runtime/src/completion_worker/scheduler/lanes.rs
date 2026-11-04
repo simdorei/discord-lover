@@ -63,6 +63,7 @@ impl std::io::Write for ByteCount {
 pub(super) enum StateWork {
     Live(Envelope),
     Durable(Entry),
+    WriterRetry(crate::queue_runner::WriterRetryHint),
 }
 
 impl StateWork {
@@ -70,12 +71,13 @@ impl StateWork {
         match self {
             Self::Live(e) => &e.target,
             Self::Durable(e) => &e.target,
+            Self::WriterRetry(hint) => &hint.target,
         }
     }
 
     pub fn needs_native(&self) -> bool {
         match self {
-            Self::Durable(_) => true,
+            Self::Durable(_) | Self::WriterRetry(_) => true,
             Self::Live(e) => match &e.event {
                 ResidentNotificationEvent::Notification { notification, .. } => {
                     notification.method == "thread/goal/updated"
@@ -102,7 +104,7 @@ impl Ready {
     pub fn live(&mut self, event: Envelope) -> bool {
         // Queued recovery cannot overtake a start/handoff already accepted here.
         self.state
-            .retain(|w| !matches!(w,StateWork::Durable(e) if e.target==event.target));
+            .retain(|w| matches!(w, StateWork::Live(_)) || w.target() != event.target);
         if self
             .state
             .iter()
@@ -116,7 +118,7 @@ impl Ready {
             if let Some(index) = self
                 .state
                 .iter()
-                .position(|w| matches!(w, StateWork::Durable(_)))
+                .position(|w| !matches!(w, StateWork::Live(_)))
             {
                 self.state.remove(index);
             } else if self.http.pop_back().is_none() {
@@ -143,13 +145,26 @@ impl Ready {
         }
     }
 
+    pub fn writer_retry(
+        &mut self,
+        hint: crate::queue_runner::WriterRetryHint,
+        active: &HashSet<String>,
+    ) {
+        if self.len() < READY_CAP
+            && !active.contains(&hint.target)
+            && !self.state.iter().any(|work| work.target() == hint.target)
+        {
+            self.state.push_back(StateWork::WriterRetry(hint));
+        }
+    }
+
     pub fn prioritize(&mut self, entry: Entry) {
         self.http.retain(|prior| !prior.same_identity(&entry));
         if self.len() >= READY_CAP && self.http.pop_back().is_none() {
             let Some(index) = self
                 .state
                 .iter()
-                .position(|w| matches!(w, StateWork::Durable(_)))
+                .position(|w| !matches!(w, StateWork::Live(_)))
             else {
                 return;
             };
@@ -180,7 +195,7 @@ impl Ready {
             let Some((permit, needs_native)) = admit(work) else {
                 // Only discard rediscoverable metadata, never a live event
                 // or its durable DB evidence. Busy hints cannot own ready capacity.
-                if matches!(work, StateWork::Durable(_)) {
+                if !matches!(work, StateWork::Live(_)) {
                     deferred.push(index);
                 }
                 return None;

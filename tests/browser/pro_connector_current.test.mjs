@@ -28,7 +28,7 @@ function fixture(config = {}) {
     catalog: true, attached: false, chat: false, draft: '', chip: true,
     mentionName, mentionPath, mentionHref: mentionPath, mentionLabel: name,
     mentionEditable: 'false', appName, appPath, appHref: appPath, appLabel: name,
-    appEditable: 'false', ...config,
+    appEditable: 'false', axReads: 0, readinessWaits: 0, ...config,
   };
   const exactChip = () => state.mentionName === mentionName &&
     state.mentionPath === mentionPath && state.mentionHref === mentionPath &&
@@ -143,9 +143,11 @@ function fixture(config = {}) {
         get: async (mode, options) => {
           assert.equal(mode, 'state');
           assert.deepEqual(options, { disableDiffing: true });
+          state.axReads += 1;
           if (state.axSnapshotFailure) throw new Error('accessibility unavailable');
           if (state.draftOnAxSnapshot) state.draft = 'concurrent user draft';
           if (state.navigateOnAxSnapshot) state.resultUrl = 'https://chatgpt.com/c/other';
+          if (state.axReads <= (state.axMissingReads ?? 0)) return '0 AXWebArea';
           return state.axState ?? `0 AXWebArea\n\t1487 button Deep research\n\t1499 button ${name} ${name}\n\t1500 text ${name}`;
         },
         click: async index => {
@@ -158,6 +160,12 @@ function fixture(config = {}) {
         },
       },
       playwright: {
+        waitForTimeout: async milliseconds => {
+          assert.equal(milliseconds, 100);
+          state.readinessWaits += 1;
+          if (state.draftDuringAxWait) state.draft = 'concurrent user draft';
+          if (state.navigateDuringAxWait) state.resultUrl = 'https://chatgpt.com/c/other';
+        },
         locator: selector => loc(selector === editor ? 'editor' : selector === surface ? 'surface' : 'missing'),
         getByRole: (role, options) => {
           if (!options.exact) return loc('missing');
@@ -475,6 +483,44 @@ test('current accessibility snapshot cannot hide a concurrent draft or navigatio
     [{ navigateOnAxSnapshot: true }, 'conversation_url'],
   ]) {
     const f = fixture({ ...plainPicker, ...config });
+    const result = await prepareProConnector({ proConversationTab: f.tab });
+    assert.equal(result.status, 'failed');
+    assert.equal(result.failed_stage, stage);
+    assert.deepEqual(f.activations, []);
+  }
+});
+
+test('current picker waits for delayed accessibility publication without another menu click', async () => {
+  const f = fixture({ ...plainPicker, axMissingReads: 2 });
+  const result = await prepareProConnector({ proConversationTab: f.tab });
+  assert.equal(result.status, 'verified');
+  assert.equal(f.state.axReads, 3);
+  assert.equal(f.state.readinessWaits, 2);
+  assert.deepEqual(f.calls, ['plus', 'menu']);
+  assert.deepEqual(f.activations, ['accessibility']);
+});
+
+test('current picker accessibility readiness is bounded and never activates a missing target', async () => {
+  const f = fixture({ ...plainPicker, axMissingReads: 100 });
+  const result = await prepareProConnector({ proConversationTab: f.tab });
+  assert.equal(result.status, 'failed');
+  assert.equal(result.failed_stage, 'connector_match');
+  assert.equal(f.state.axReads, 10);
+  assert.equal(f.state.readinessWaits, 9);
+  assert.deepEqual(f.activations, []);
+});
+
+test('current picker stops immediately for duplicate targets and protects changes during readiness', async () => {
+  const duplicate = fixture({ ...plainPicker, axState: `1499 button ${name} ${name}\n1502 button ${name} ${name}` });
+  assert.equal((await prepareProConnector({ proConversationTab: duplicate.tab })).status, 'failed');
+  assert.equal(duplicate.state.axReads, 1);
+  assert.equal(duplicate.state.readinessWaits, 0);
+  assert.deepEqual(duplicate.activations, []);
+  for (const [change, stage] of [
+    [{ draftDuringAxWait: true }, 'composer_not_empty'],
+    [{ navigateDuringAxWait: true }, 'conversation_url'],
+  ]) {
+    const f = fixture({ ...plainPicker, axMissingReads: 1, ...change });
     const result = await prepareProConnector({ proConversationTab: f.tab });
     assert.equal(result.status, 'failed');
     assert.equal(result.failed_stage, stage);

@@ -272,14 +272,22 @@ async function currentPickerAxTarget(tab) {
   if (typeof tab.ax?.get !== "function" || typeof tab.ax?.click !== "function") {
     return null;
   }
-  const state = await tab.ax.get("state", { disableDiffing: true });
   const expected = `${CONNECTOR_NAME} ${CONNECTOR_NAME}`;
-  const matches = state.split(/\r?\n/)
-    .map(line => line.match(/^[\t ]*(\d+) button (.+)$/))
-    .filter(match => match?.[2] === expected);
-  if (matches.length !== 1) return null;
-  const target = Number(matches[0][1]);
-  return Number.isSafeInteger(target) ? target : null;
+  // The DOM can publish the menu before its accessibility tree is ready.
+  // Retry observation only; never reopen the menu or repeat an activation.
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const state = await tab.ax.get("state", { disableDiffing: true });
+    const matches = state.split(/\r?\n/)
+      .map(line => line.match(/^[\t ]*(\d+) button (.+)$/))
+      .filter(match => match?.[2] === expected);
+    if (matches.length > 1) return null;
+    if (matches.length === 1) {
+      const target = Number(matches[0][1]);
+      return Number.isSafeInteger(target) ? target : null;
+    }
+    if (attempt < 9) await tab.playwright.waitForTimeout(100);
+  }
+  return null;
 }
 
 async function prepareCurrentConnector(tab) {

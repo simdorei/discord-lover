@@ -19,6 +19,8 @@ mod preflight_tests;
 #[cfg(test)]
 mod round_tests;
 mod work;
+#[cfg(test)]
+mod writer_retry_tests;
 use lanes::{Envelope, HTTP_SLOTS, Ready, STATE_SLOTS, StateWork};
 
 #[derive(Clone)]
@@ -361,6 +363,10 @@ pub(super) async fn run(worker: &CompletionWorker, mut pending: mpsc::Receiver<E
             },
             () = tokio::time::sleep_until(close_deadline), if input_closed => return,
             _ = tick.tick() => {
+                match worker.queue.due_writer_retries() {
+                    Ok(hints) => for hint in hints { ready.writer_retry(hint, &active); },
+                    Err(error) => CompletionWorker::report(Err(error.into())),
+                }
                 discover_round(&mut scans,&mut next_scan,worker,&mut ready,&active)
                     .discard(&mut ready);
             },
@@ -400,7 +406,7 @@ fn launch_state<'a>(
         };
         let target = item.target().to_owned();
         let wake = match &item {
-            StateWork::Durable(_) => true,
+            StateWork::Durable(_) | StateWork::WriterRetry(_) => true,
             StateWork::Live(event) => matches!(&event.event,
                 cdr_app_server::ResidentNotificationEvent::Notification {notification,..}
                 if matches!(notification.method.as_str(),
@@ -414,6 +420,13 @@ fn launch_state<'a>(
                 let result = match item {
                     StateWork::Live(event) => worker.handle_mode(event.event, mode).await,
                     StateWork::Durable(entry) => work::state(worker, &entry, mode).await,
+                    StateWork::WriterRetry(hint) => {
+                        match admission.lease.consume_writer_retry(&hint) {
+                            Ok(true) => worker.recover_lane(&hint.target, mode).await,
+                            Ok(false) => Ok(()),
+                            Err(error) => Err(error.into()),
+                        }
+                    }
                 };
                 (target, needs_native, wake, result)
             }
