@@ -8,6 +8,8 @@ fn force_restart_interrupts_busy_work_and_preserves_process_ownership() {
     let output = Command::new("powershell.exe")
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(repo.join("scripts/Test-CdrForceRestart.ps1"))
+        .arg("-RuntimeBinary")
+        .arg(env!("CARGO_BIN_EXE_cdr-runtime"))
         .output()
         .unwrap();
     assert!(

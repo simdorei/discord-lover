@@ -57,6 +57,25 @@ fn default_root_is_script_folder_from_unrelated_directory() {
         root.path().join("restart.ps1"),
     )
     .unwrap();
+    fs::create_dir_all(root.path().join("scripts")).unwrap();
+    for file in [
+        "CdrRuntimeIdentity.psm1",
+        "CdrBuildProvenance.psm1",
+        "CdrNativeProcess.psm1",
+        "CdrAsyncRecoveryCompatibility.ps1",
+    ] {
+        fs::copy(
+            repo().join("scripts").join(file),
+            root.path().join("scripts").join(file),
+        )
+        .unwrap();
+    }
+    fs::create_dir_all(root.path().join("target/release")).unwrap();
+    fs::copy(
+        env!("CARGO_BIN_EXE_cdr-runtime"),
+        root.path().join("target/release/cdr-runtime.exe"),
+    )
+    .unwrap();
     fs::write(root.path().join("codex-discord-rust-watchdog.ps1"),"param($RepoRoot,$BinaryPath,[switch]$DryRun,$RestartQuietSeconds)\nif(-not $DryRun){throw 'not a dry run'}\nWrite-Output $RepoRoot\nexit 0\n").unwrap();
     let out = Command::new("powershell.exe")
         .args(["-NoProfile", "-File"])

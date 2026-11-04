@@ -38,7 +38,8 @@ if ($Scenario -like 'engine-*') {
 $files=@('codex-discord-rust-watchdog.ps1','codex-discord-rust-control.ps1','codex-discord-rust-drain.ps1',
     'scripts/CdrAsyncRecoveryCompatibility.ps1','scripts/CdrRuntimeLaunchCompatibility.ps1',
     'scripts/CdrDeploymentRecovery.ps1','scripts/CdrLaunchJournal.ps1','scripts/CdrRestartTransaction.ps1',
-    'scripts/CdrForceRestart.ps1','scripts/CdrInstallLaunchCompatibility.ps1')
+    'scripts/CdrForceRestart.ps1','scripts/CdrInstallLaunchCompatibility.ps1',
+    'scripts/CdrRestartPreparation.ps1','scripts/CdrRuntimeIdentity.psm1','scripts/CdrBuildProvenance.psm1','scripts/CdrNativeProcess.psm1')
 $entries=@()
 foreach ($relative in $files) {
     $destination=Join-Path $RepoRoot $relative

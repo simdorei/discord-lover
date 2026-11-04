@@ -43,6 +43,8 @@ function Get-CdrMaintenanceProgramPaths([string]$DeploymentPolicy = '') {
     @('codex-discord-rust-watchdog.ps1','codex-discord-rust-control.ps1','codex-discord-rust-drain.ps1',
         'scripts/CdrLaunchJournal.ps1','scripts/CdrDeploymentRecovery.ps1','scripts/CdrRestartTransaction.ps1',
         'scripts/CdrForceRestart.ps1','scripts/CdrMaintenanceCompatibility.ps1',
+        'scripts/CdrRestartPreparation.ps1','scripts/CdrRuntimeIdentity.psm1',
+        'scripts/CdrBuildProvenance.psm1','scripts/CdrNativeProcess.psm1','scripts/CdrAsyncRecoveryCompatibility.ps1',
         'scripts/Invoke-CdrMaintenance.ps1','scripts/CdrMaintenanceState.ps1','scripts/CdrMaintenanceEngine.ps1',
         'scripts/CdrMaintenanceCommand.ps1','scripts/CdrMaintenanceDiagnostics.ps1','scripts/CdrMaintenanceActions.ps1','scripts/CdrMaintenanceLaunch.ps1','scripts/CdrMaintenanceNotification.ps1',
         'scripts/CdrMaintenanceSchedule.ps1','scripts/CdrMaintenanceBackup.ps1','scripts/CdrMaintenanceFailure.ps1',
@@ -50,7 +52,7 @@ function Get-CdrMaintenanceProgramPaths([string]$DeploymentPolicy = '') {
         'scripts/CdrMaintenanceCompletionAudit.ps1',
         'codex-discord-tray.ps1','codex-discord-tray-runtime.ps1','codex-discord-tray-restart-runtime.ps1')
     if ($DeploymentPolicy -ceq 'stabilization-held-v1') {
-        @('scripts/CdrAsyncRecoveryCompatibility.ps1','scripts/CdrRuntimeLaunchCompatibility.ps1',
+        @('scripts/CdrRuntimeLaunchCompatibility.ps1',
             'scripts/CdrInstallLaunchCompatibility.ps1','scripts/Register-CdrStabilization.ps1')
     } elseif ($DeploymentPolicy) { throw 'maintenance_deployment_policy_unsupported' }
 }

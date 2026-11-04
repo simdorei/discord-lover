@@ -42,6 +42,8 @@ function Read-CdrUpgradeState {
 function Get-CdrUpgradeCodePaths {
     @('update.ps1','codex-discord-rust-watchdog.ps1','codex-discord-rust-control.ps1','codex-discord-rust-drain.ps1',
         'scripts/CdrDeploymentRecovery.ps1','scripts/CdrLaunchJournal.ps1','scripts/CdrRestartTransaction.ps1',
+        'scripts/CdrRestartPreparation.ps1','scripts/CdrRuntimeIdentity.psm1','scripts/CdrBuildProvenance.psm1',
+        'scripts/CdrNativeProcess.psm1','scripts/CdrAsyncRecoveryCompatibility.ps1',
         'scripts/CdrForceRestart.ps1','scripts/CdrMaintenanceCompatibility.ps1','scripts/CdrMaintenanceDiagnostics.ps1',
         'scripts/CdrUpgradeState.ps1','scripts/CdrUpgradeFiles.ps1','scripts/CdrUpgradeCommand.ps1',
         'scripts/CdrUpgradeCompatibility.ps1','scripts/CdrUpgradeEngine.ps1')

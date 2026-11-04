@@ -1,5 +1,12 @@
 # Invoked only by the watchdog's dedicated maintenance entry, under its control lock.
 # Deliberately never calls generic health recovery or Stop-VerifiedRuntime.
+function New-CdrDeploymentRecoveryReceipt {
+    param($State,[string]$Hash,[string]$Identity)
+    [ordered]@{Marker=$State.Marker;Hash=$Hash;ReplacementIdentity=$Identity;
+        ArtifactRole=$(if($Hash -ceq $State.BaselineHash){'restored_baseline'}else{'candidate_recovery'});
+        SourceState='unknown'}
+}
+
 function Invoke-CdrDeploymentRecovery {
     param([string]$StatePath)
     Assert-CdrNoPendingRestart -Root $RepoRoot
@@ -30,6 +37,7 @@ function Invoke-CdrDeploymentRecovery {
     if ($hash -notin @($state.BaselineHash, $state.CandidateHash)) {
         throw 'Installed executable is not an approved deployment artifact'
     }
+    $artifactRole=if($hash -ceq $state.BaselineHash){'restored_baseline'}else{'candidate_recovery'}
     $journalPath = $StatePath + '.launch'
     $launch = Read-CdrLaunchJournal $journalPath
     # A terminal receipt is evidence only, never authority for another launch.
@@ -43,7 +51,7 @@ function Invoke-CdrDeploymentRecovery {
             throw 'Previously completed deployment has no exact live child; a new operation is required'
         }
         Wait-CdrReplacementReady -ExpectedIdentity $receipt.ReplacementIdentity
-        Write-Output 'recovery_completed_verified'
+        Write-Output "recovery_completed_verified artifact_role=$artifactRole source=unknown"
         return
     }
     if ($null -ne $launch) {
@@ -85,12 +93,12 @@ function Invoke-CdrDeploymentRecovery {
             Assert-CdrMarkerOwner -Path $DisablePath -Text $state.Marker
             # Only a pending launch journal authorizes consuming the recovery seal.
             Write-AtomicRestartMarker -Path $receiptPath -Text (
-                [ordered]@{Marker=$state.Marker; Hash=$hash; ReplacementIdentity=$launch.ChildIdentity} |
+                (New-CdrDeploymentRecoveryReceipt $state $hash $launch.ChildIdentity) |
                     ConvertTo-Json -Compress
             )
             if ([IO.File]::Exists($DisablePath)) { [IO.File]::Delete($DisablePath) }
             [IO.File]::Delete($journalPath)
-            Write-Output 'recovery_completed_verified'
+            Write-Output "recovery_completed_verified artifact_role=$artifactRole source=unknown"
             return
         }
         if ($null -eq $receipt -or $receipt.Hash -cne $hash -or
@@ -101,7 +109,7 @@ function Invoke-CdrDeploymentRecovery {
             throw 'Another maintenance intent is active; deployment completion refused'
         }
         Wait-CdrReplacementReady -ExpectedIdentity $receipt.ReplacementIdentity
-        Write-Output 'recovery_completed_verified'
+        Write-Output "recovery_completed_verified artifact_role=$artifactRole source=unknown"
         return
     }
     if (-not [IO.File]::Exists($StopPath) -and -not [IO.File]::Exists($DisablePath) -and
@@ -139,7 +147,7 @@ function Invoke-CdrDeploymentRecovery {
         }
         Wait-CdrReplacementReady -ExpectedIdentity $identity
         Write-AtomicRestartMarker -Path $receiptPath -Text (
-            [ordered]@{Marker=$state.Marker; Hash=$hash; ReplacementIdentity=$identity} |
+            (New-CdrDeploymentRecoveryReceipt $state $hash $identity) |
                 ConvertTo-Json -Compress
         )
         Assert-CdrMarkerOwner -Path $DisablePath -Text $state.Marker
@@ -159,5 +167,5 @@ function Invoke-CdrDeploymentRecovery {
     Add-Content -LiteralPath $state.LogPath -Encoding UTF8 -Value (
         "$(Get-Date -Format o) recovery_completed_verified identity=$identity sha256=$hash"
     )
-    Write-Output 'recovery_completed_verified'
+    Write-Output "recovery_completed_verified artifact_role=$artifactRole source=unknown"
 }

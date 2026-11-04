@@ -7,6 +7,8 @@ param(
     [switch]$ForceWorker,
     [switch]$Deferred,
     [string]$ExpectedBotIdentity,
+    [string]$ExpectedBinaryHash,
+    [string]$ExpectedSourceCommit,
     [int]$DelaySeconds = 10,
     [int]$QuietSeconds = 90,
     [int]$WaitTimeoutSeconds = 900
@@ -23,6 +25,10 @@ $RestartLog = Join-Path $RepoRoot 'codex-discord-rust-restart.log'
 $BinaryPath = [IO.Path]::GetFullPath(
     (Join-Path $RepoRoot 'target\release\cdr-runtime.exe')
 )
+Import-Module (Join-Path $RepoRoot 'scripts/CdrRuntimeIdentity.psm1') -Force
+# Capture once, before any deferred/independent handoff or readiness wait.
+$artifact=Get-CdrRuntimeArtifact $BinaryPath $ExpectedBinaryHash $ExpectedSourceCommit
+$ExpectedBinaryHash=$artifact.ArtifactHash
 $EffectiveDelaySeconds = [math]::Max($MinimumDelaySeconds, $DelaySeconds)
 $EffectiveQuietSeconds = [math]::Max($MinimumQuietSeconds, $QuietSeconds)
 if ($WaitTimeoutSeconds -lt 0) {
@@ -62,6 +68,7 @@ function Get-VerifiedRustIdentity {
 
 function Invoke-RestartReadinessCheck {
     param([string]$Identity)
+    $null=Get-CdrRuntimeArtifact $BinaryPath $ExpectedBinaryHash $ExpectedSourceCommit
     # Preflight is read-only. A bad/stale thread must not seal live intake.
     Push-Location -LiteralPath $RepoRoot
     $previousPreference = $ErrorActionPreference
@@ -87,6 +94,7 @@ function Invoke-RestartReadinessCheck {
         -BinaryPath $BinaryPath `
         -PrepareRestart `
         -ExpectedRuntimeIdentity $Identity `
+        -ExpectedBinaryHash $ExpectedBinaryHash -ExpectedSourceCommit $ExpectedSourceCommit `
         -RestartQuietSeconds $EffectiveQuietSeconds `
         -RestartWaitTimeoutSeconds $WaitTimeoutSeconds
     if ($LASTEXITCODE -ne 0) {
@@ -121,6 +129,7 @@ function Invoke-BoundRustRestart {
         -RepoRoot $RepoRoot `
         -BinaryPath $BinaryPath `
         -CompleteRestartFenceJson ($fence | ConvertTo-Json -Compress) `
+        -ExpectedBinaryHash $ExpectedBinaryHash -ExpectedSourceCommit $ExpectedSourceCommit `
         -RestartQuietSeconds $EffectiveQuietSeconds `
         -RestartWaitTimeoutSeconds $WaitTimeoutSeconds
     if ($LASTEXITCODE -ne 0) {
@@ -138,13 +147,13 @@ if ($Force) {
         }
         if (-not $DryRun -and (Test-CdrCallerInsideRuntime $forceIdentity)) {
             if ($ForceWorker) { throw 'Independent force worker is still inside the bot process tree.' }
-            $workerPid = Start-CdrDetachedForceRestart -Root $RepoRoot -Identity $forceIdentity
+            $workerPid = Start-CdrDetachedForceRestart -Root $RepoRoot -Identity $forceIdentity -ExpectedBinaryHash $ExpectedBinaryHash -ExpectedSourceCommit $ExpectedSourceCommit
             Write-RustRestartLog "force_restart_handed_off worker_pid=$workerPid identity=$forceIdentity"
             Write-Output "force_restart_handed_off worker_pid=$workerPid active_work_wait=false"
             exit 0
         }
         & $Watchdog -RepoRoot $RepoRoot -BinaryPath $BinaryPath -ForceRestart `
-            -ExpectedRuntimeIdentity $ExpectedBotIdentity -DryRun:$DryRun
+            -ExpectedRuntimeIdentity $ExpectedBotIdentity -ExpectedBinaryHash $ExpectedBinaryHash -ExpectedSourceCommit $ExpectedSourceCommit -DryRun:$DryRun
         exit $LASTEXITCODE
     } catch {
         Write-RustRestartLog "force_restart_failed error=$($_.Exception.Message)"
@@ -172,8 +181,8 @@ if ($DryRun) {
 if ($Deferred) {
     try {
         Invoke-BoundRustRestart -Identity $ExpectedBotIdentity
-        Write-RustRestartLog 'restart_completed runtime=rust'
-        Write-Output 'restart_completed: runtime=rust'
+        Write-RustRestartLog "restart_completed runtime=rust installed_sha256=$ExpectedBinaryHash"
+        Write-Output "restart_completed: runtime=rust installed_sha256=$ExpectedBinaryHash"
         exit 0
     } catch {
         $message = $_.Exception.Message
@@ -200,7 +209,7 @@ if ($Immediate) {
     Invoke-BoundRustRestart -Identity $expectedIdentity
     Write-Output (
         "restart_completed: runtime=rust quiet_seconds=$EffectiveQuietSeconds " +
-        "wait_timeout_seconds=$WaitTimeoutSeconds"
+        "wait_timeout_seconds=$WaitTimeoutSeconds installed_sha256=$ExpectedBinaryHash"
     )
     exit 0
 }
@@ -210,6 +219,7 @@ $escapedRoot = $RepoRoot.Replace("'", "''")
 $command = (
     "& '$escapedScript' -RepoRoot '$escapedRoot' -Deferred " +
     "-ExpectedBotIdentity '$expectedIdentity' -DelaySeconds $EffectiveDelaySeconds " +
+    "-ExpectedBinaryHash '$ExpectedBinaryHash' -ExpectedSourceCommit '$ExpectedSourceCommit' " +
     "-QuietSeconds $EffectiveQuietSeconds -WaitTimeoutSeconds $WaitTimeoutSeconds"
 )
 Start-Process -FilePath 'powershell.exe' `

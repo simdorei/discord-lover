@@ -28,6 +28,7 @@ foreach ($support in @('codex-discord-rust-watchdog.ps1','codex-discord-rust-con
     'scripts/CdrLaunchJournal.ps1','scripts/CdrForceRestart.ps1','scripts/CdrDeploymentRecovery.ps1','scripts/CdrRestartTransaction.ps1',
     'scripts/CdrMaintenanceCompatibility.ps1','scripts/CdrAsyncRecoveryCompatibility.ps1',
     'scripts/CdrRuntimeLaunchCompatibility.ps1',
+    'scripts/CdrRestartPreparation.ps1','scripts/CdrRuntimeIdentity.psm1','scripts/CdrBuildProvenance.psm1','scripts/CdrNativeProcess.psm1',
     'scripts/CdrManualReserveCutover.ps1','scripts/Invoke-CdrManualReserveCutover.ps1')) {
     $destination=Join-Path $RepoRoot $support
     [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($destination))

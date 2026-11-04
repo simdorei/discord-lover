@@ -14,6 +14,8 @@ mod prompt_intake_submission;
 mod recovery;
 mod recovery_readiness;
 mod retry;
+mod retry_deadlines;
+pub(crate) use retry_deadlines::WriterRetryHint;
 mod submission;
 mod target_lease;
 mod types;
@@ -23,7 +25,10 @@ mod unavailable_log;
 
 pub use fork_handoff::AppServerTarget;
 pub use recovery::RecoveryReport;
-pub use retry::{pending_retry_due_at, pending_retry_is_due, retry_delay_seconds};
+pub use retry::{
+    is_definite_writer_rejection, pending_retry_due_at, pending_retry_is_due,
+    retry_delay_for_error, retry_delay_seconds,
+};
 pub use types::{
     BackendFailure, BackendFailureKind, BoxBackendFuture, BusyStatus, QueueRunnerError, Submission,
     TurnBackend, TurnRecord, is_active_writer_message,
@@ -36,6 +41,7 @@ pub struct QueueCoordinator<B: TurnBackend> {
     pub(super) recovery_state: Mutex<RecoveryState>,
     pub(super) admission: Option<AdmissionGate>,
     delivery_ready: tokio::sync::Notify,
+    writer_retries: Mutex<retry_deadlines::WriterRetryDeadlines>,
 }
 
 #[derive(Default)]
@@ -55,6 +61,7 @@ impl<B: TurnBackend> QueueCoordinator<B> {
             recovery_state: Mutex::new(RecoveryState::default()),
             admission: None,
             delivery_ready: tokio::sync::Notify::new(),
+            writer_retries: Mutex::default(),
         }
     }
 

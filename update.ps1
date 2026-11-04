@@ -24,9 +24,10 @@ if (-not $Resume) {
     if ($CandidatePath.StartsWith($TargetRoot+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Do not build/stage inside the operating installation.' }
     if (-not $SkipBuild -and -not $Preview) {
         if ($PSBoundParameters.ContainsKey('CandidatePath')) { throw 'Use -SkipBuild with an explicitly built CandidatePath.' }
-        & cargo build --manifest-path (Join-Path $UpgradeSourceRoot 'Cargo.toml') --locked --release -p cdr-runtime `
-            --bin cdr-runtime --target-dir (Join-Path $UpgradeSourceRoot 'target')
-        if ($LASTEXITCODE -ne 0) { throw 'Candidate build failed; the installed bot was not changed.' }
+        Import-Module (Join-Path $UpgradeSourceRoot 'scripts/CdrBuildProvenance.psm1') -Force
+        $null=Invoke-CdrRuntimeBuild -Root $UpgradeSourceRoot -BinaryPath $CandidatePath `
+            -CargoArguments @('build','--locked','--release','-p','cdr-runtime','--bin','cdr-runtime',
+                '--target-dir',(Join-Path $UpgradeSourceRoot 'target'))
     }
     if (-not [IO.File]::Exists($CandidatePath)) { throw 'Build the candidate first, or pass -CandidatePath with -SkipBuild.' }
 }

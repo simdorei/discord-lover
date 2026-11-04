@@ -99,7 +99,7 @@ function Assert-CdrMarkerOwner {
 }
 
 function Wait-CdrReplacementReady {
-    param([string]$ExpectedIdentity, [int]$TimeoutSeconds = 15)
+    param([string]$ExpectedIdentity, [int]$TimeoutSeconds = 15, $Artifact=$null)
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
     do {
         $process = Get-VerifiedRuntimeProcess
@@ -107,14 +107,21 @@ function Wait-CdrReplacementReady {
             throw 'Replacement runtime identity changed before completion'
         }
         $health = Get-HeartbeatHealth -Process $process
-        if ($health.Healthy -and -not $health.Bootstrap) { return }
+        if ($health.Healthy -and -not $health.Bootstrap) {
+            if ($null -ne $Artifact -and $Artifact.PSObject.Properties['ArtifactHash'] -and $Artifact.ArtifactHash) {
+                $pin=Get-CdrRuntimeArtifactPin $BinaryPath $Artifact.ArtifactHash
+                try { Assert-CdrStartedArtifact $RepoRoot $BinaryPath $ExpectedIdentity $Artifact }
+                finally { $pin.Dispose() }
+            }
+            return
+        }
         Start-Sleep -Milliseconds 100
     } while ((Get-Date) -lt $deadline)
     throw 'Replacement runtime did not publish a fresh matching heartbeat'
 }
 
 function Write-CdrRestartCompletion {
-    param($Fence, [string]$ExpectedChildIdentity)
+    param($Fence, [string]$ExpectedChildIdentity, $Artifact=$null)
     $identity = Get-VerifiedRuntimeIdentity
     if ($ExpectedChildIdentity -and $identity -cne $ExpectedChildIdentity) {
         throw 'Runtime lock belongs to a different child; completion refused'
@@ -122,10 +129,15 @@ function Write-CdrRestartCompletion {
     if ([string]::IsNullOrWhiteSpace($identity) -or $identity -ceq $Fence.ProcessIdentity) {
         throw 'Restart did not produce a verified replacement identity'
     }
-    Wait-CdrReplacementReady -ExpectedIdentity $identity
+    Wait-CdrReplacementReady -ExpectedIdentity $identity -Artifact $Artifact
     $receipt = [ordered]@{
         RuntimeId=$Fence.RuntimeId; ProcessIdentity=$Fence.ProcessIdentity
         Nonce=$Fence.Nonce; ReplacementIdentity=$identity
+    }
+    if ($null -ne $Artifact -and $Artifact.ArtifactHash) {
+        $receipt.ArtifactHash=$Artifact.ArtifactHash
+        $receipt.RequireStartupRecord= [bool]($Artifact.PSObject.Properties['RequireStartupRecord'] -and $Artifact.RequireStartupRecord)
+        $receipt.BuildInfo=if($Artifact.PSObject.Properties['BuildInfo']){$Artifact.BuildInfo}else{$null}
     }
     if ($script:CdrTrayStartedIdentity -and $script:CdrTrayStartedIdentity -ceq $identity) {
         $receipt.TrayBootstrapIdentity = $identity
@@ -136,7 +148,7 @@ function Write-CdrRestartCompletion {
 }
 
 function Test-CdrRestartCompleted {
-    param($Fence)
+    param($Fence, [string]$ExpectedBinaryHash, [string]$ExpectedSourceCommit)
     $path = Join-Path $RepoRoot '.codex_discord_rust.restart.completed'
     if (-not [IO.File]::Exists($path)) { return $false }
     $receipt = [IO.File]::ReadAllText($path) | ConvertFrom-Json
@@ -151,6 +163,8 @@ function Test-CdrRestartCompleted {
         [IO.File]::Exists((Join-Path $RepoRoot '.codex_discord_bot.disabled'))) {
         throw 'Another maintenance intent is active; restart completion cannot be certified'
     }
-    Wait-CdrReplacementReady -ExpectedIdentity $receipt.ReplacementIdentity
+    if ($ExpectedBinaryHash -and $receipt.ArtifactHash -cne $ExpectedBinaryHash.ToUpperInvariant()) { throw 'Restart receipt does not match the requested artifact.' }
+    if ($ExpectedSourceCommit) { $null=Get-CdrRuntimeArtifact $BinaryPath $receipt.ArtifactHash $ExpectedSourceCommit }
+    Wait-CdrReplacementReady -ExpectedIdentity $receipt.ReplacementIdentity -Artifact $receipt
     return $true
 }

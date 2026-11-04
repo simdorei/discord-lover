@@ -39,6 +39,9 @@ tokio-tungstenite.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
 twilight-http-ratelimiting = "0.17.1"
 
+[build-dependencies]
+serde_json.workspace = true
+
 [[bin]]
 name = "cdr-runtime"
 path = "src/main.rs"

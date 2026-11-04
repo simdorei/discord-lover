@@ -18,6 +18,10 @@ fn fixture() -> tempfile::TempDir {
         "scripts/CdrDeploymentRecovery.ps1",
         "scripts/CdrLaunchJournal.ps1",
         "scripts/CdrRestartTransaction.ps1",
+        "scripts/CdrRestartPreparation.ps1",
+        "scripts/CdrRuntimeIdentity.psm1",
+        "scripts/CdrBuildProvenance.psm1",
+        "scripts/CdrNativeProcess.psm1",
         "scripts/CdrForceRestart.ps1",
         "scripts/CdrMaintenanceCompatibility.ps1",
         "scripts/CdrAsyncRecoveryCompatibility.ps1",
@@ -229,4 +233,27 @@ fn watchdog_respects_maintenance_owner_before_process_actions() {
         assert!(!stdout.contains("WAIT_EXIT") && !stdout.contains("START_ATTEMPT="));
         assert_eq!(fs::read_to_string(marker).unwrap(), "owned v2 state");
     }
+}
+
+#[test]
+fn preparing_journal_survives_crashes_before_drain_and_after_restart_marker() {
+    let root = fixture();
+    run(
+        root.path(),
+        "recovery.ps1",
+        &[
+            "-CaseName",
+            "test_preparing_journal_recovers_without_unsealed_launch",
+        ],
+    );
+}
+
+#[test]
+fn changed_artifact_is_rejected_before_intake_is_sealed() {
+    let root = fixture();
+    run(
+        root.path(),
+        "recovery.ps1",
+        &["-CaseName", "test_changed_artifact_refuses_before_drain"],
+    );
 }

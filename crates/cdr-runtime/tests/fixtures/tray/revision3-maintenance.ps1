@@ -26,6 +26,13 @@ $StdoutLog=Join-Path $RepoRoot 'fixture.out';$StderrLog=Join-Path $RepoRoot 'fix
 [IO.File]::WriteAllText($DisablePath,$state.Operation)
 . (Join-Path $env:V2_SOURCE 'scripts\CdrLaunchJournal.ps1')
 . (Join-Path $env:V2_SOURCE 'scripts\CdrMaintenanceLaunch.ps1')
+Import-Module (Join-Path $env:V2_SOURCE 'scripts/CdrRuntimeIdentity.psm1')
+# Only the executable/child boundaries are simulated in this offline UI test.
+function Get-CdrRuntimeArtifact {param($Path,$ExpectedBinaryHash,$ExpectedSourceCommit)
+ [pscustomobject]@{ArtifactHash=(Get-CdrArtifactHash $Path);BuildInfo=$null;RequireStartupRecord=$false}
+}
+$state.CandidateHash=Get-CdrArtifactHash $BinaryPath
+[IO.File]::WriteAllText($StatePath,($state|ConvertTo-Json -Depth 10))
 $tokens=$null;$errors=$null
 $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $env:V2_SOURCE 'codex-discord-rust-watchdog.ps1'),[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'watchdog parse failure'}

@@ -9,6 +9,7 @@ $ErrorActionPreference = 'Stop'
             . ([scriptblock]::Create($source.Substring(0, $entryIndex))) `
                 -RepoRoot $root -BinaryPath (Join-Path $root 'probe.exe')
             $entry = [scriptblock]::Create($source.Substring($entryIndex))
+            . (Join-Path $PSScriptRoot 'artifact.ps1')
             $script:oldAlive = $OldAlive
             $script:startCount = 0
             $script:newAlive = $false

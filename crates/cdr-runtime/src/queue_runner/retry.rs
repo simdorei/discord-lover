@@ -23,12 +23,36 @@ pub const fn retry_delay_seconds(failure_count: i64) -> u32 {
     }
 }
 
+/// Only a definite resume rejection is safe for the short writer-lock retry.
+/// Broad UI matching must not turn an unknown start outcome into a retry.
+#[must_use]
+pub fn is_definite_writer_rejection(error: &str) -> bool {
+    error
+        .strip_prefix("app-server returned error -32600 for thread/resume: thread ")
+        .and_then(|rest| rest.strip_suffix(" already has an active writer"))
+        .is_some_and(|thread| !thread.is_empty() && !thread.chars().any(char::is_whitespace))
+}
+
+#[must_use]
+pub fn retry_delay_for_error(failure_count: i64, error: &str) -> u32 {
+    if is_definite_writer_rejection(error) {
+        match failure_count {
+            i64::MIN..=0 => 0,
+            1 => 5,
+            2 => 10,
+            _ => 15,
+        }
+    } else {
+        retry_delay_seconds(failure_count)
+    }
+}
+
 #[must_use]
 pub fn pending_retry_due_at(failure_count: i64, last_error: &str, updated_at: f64) -> Option<f64> {
     if failure_count <= 0 || last_error.is_empty() || !updated_at.is_finite() {
         return None;
     }
-    let due_at = updated_at + f64::from(retry_delay_seconds(failure_count));
+    let due_at = updated_at + f64::from(retry_delay_for_error(failure_count, last_error));
     due_at.is_finite().then_some(due_at)
 }
 
@@ -254,7 +278,11 @@ impl<B: TurnBackend> QueueCoordinator<B> {
         generation: i64,
         error: &BackendFailure,
     ) -> Result<(), QueueRunnerError> {
-        let _ = record_preflight_failure(&self.db_path, &job.job_id, generation, &error.message)?;
+        if let Some(recorded) =
+            record_preflight_failure(&self.db_path, &job.job_id, generation, &error.message)?
+        {
+            self.schedule_writer_retry(&recorded)?;
+        }
         Ok(())
     }
 }

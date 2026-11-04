@@ -19,8 +19,9 @@ function Test-CdrCallerInsideRuntime {
 }
 
 function Start-CdrDetachedForceRestart {
-    param([string]$Root, [string]$Identity)
+    param([string]$Root, [string]$Identity, [string]$ExpectedBinaryHash, [string]$ExpectedSourceCommit)
     if ($Identity -notmatch '^\d+\|\d+$') { throw 'Detached force restart requires an exact runtime identity.' }
+    if ($ExpectedBinaryHash -cnotmatch '^[A-F0-9]{64}$' -or ($ExpectedSourceCommit -and $ExpectedSourceCommit -cnotmatch '^[a-f0-9]{40}$')) { throw 'Detached force restart requires a pinned artifact.' }
     $entry=Join-Path $Root 'codex-discord-rust-restart.ps1'
     if (-not [IO.File]::Exists($entry)) { throw 'Force restart entry was not found.' }
     # WMI starts a local worker under the OS provider, outside the bot's process
@@ -31,7 +32,8 @@ function Start-CdrDetachedForceRestart {
         ShowWindow=[uint16]0; EnvironmentVariables=$environment
     }
     $command='"' + (Join-Path $PSHOME 'powershell.exe') + '" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "' +
-        $entry + '" -RepoRoot "' + $Root + '" -Force -ForceWorker -ExpectedBotIdentity "' + $Identity + '"'
+        $entry + '" -RepoRoot "' + $Root + '" -Force -ForceWorker -ExpectedBotIdentity "' + $Identity + '" -ExpectedBinaryHash "' + $ExpectedBinaryHash + '"'
+    if($ExpectedSourceCommit){$command+=' -ExpectedSourceCommit "'+$ExpectedSourceCommit+'"'}
     $result=Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
         CommandLine=$command; CurrentDirectory=$Root; ProcessStartupInformation=$startup
     }
@@ -195,8 +197,9 @@ function Invoke-CdrForceRestart {
     }
     # Any extra same-binary process must be a verified read-only readiness probe.
     # Missing/replaced lock therefore cannot silently permit a second bot.
-    Stop-CdrRestartReadinessProbes -Preview:$Preview
+    $artifact=Get-CdrRuntimeArtifact $BinaryPath $ExpectedBinaryHash $ExpectedSourceCommit
     if ($Preview) {
+        Stop-CdrRestartReadinessProbes -Preview
         Write-Output "would_force_restart identity=$identity wait_for_active_work=false"
         return
     }
@@ -216,11 +219,17 @@ function Invoke-CdrForceRestart {
         [void][IO.Directory]::CreateDirectory($backup)
         $record = [pscustomobject]@{
             Version=1; BinaryPath=$BinaryPath; Operation="force:$nonce"; Fence=$null
-            Phase='stopping'; ChildIdentity=''; ClaimPath=''; ArtifactHash=''
+            Phase='stopping'; ChildIdentity=''; ClaimPath=''; ArtifactHash=$artifact.ArtifactHash
+            BuildInfo=$artifact.BuildInfo; RequireStartupRecord=$artifact.RequireStartupRecord
             TargetIdentity=$identity; BackupRoot=$backup
         }
         Save-CdrLaunchJournal $journalPath $record
     }
+    if ($ExpectedBinaryHash -and $record.ArtifactHash -cne $ExpectedBinaryHash.ToUpperInvariant()) { throw 'Force restart artifact changed across handoff.' }
+    if (-not $record.ArtifactHash) { throw 'Legacy force journal has no pinned artifact; explicit recovery required.' }
+    $artifactPin=Get-CdrRuntimeArtifactPin $BinaryPath $record.ArtifactHash
+    try {
+    Stop-CdrRestartReadinessProbes
     if ($record.Phase -eq 'stopping') {
         if ($null -ne $process) {
             if ($identity -cne $record.TargetIdentity) { throw 'Another runtime replaced the force target; preserved.' }
@@ -245,13 +254,15 @@ function Invoke-CdrForceRestart {
         finally { $script:CdrLaunchJournalPath = $null }
         $record = Read-CdrLaunchJournal $journalPath
     }
-    Wait-CdrReplacementReady -ExpectedIdentity $record.ChildIdentity
+    Wait-CdrReplacementReady -ExpectedIdentity $record.ChildIdentity -Artifact $record
     $receipt = [ordered]@{ Operation=$record.Operation; InterruptedIdentity=$record.TargetIdentity
         ReplacementIdentity=$record.ChildIdentity; CompletedAt=[DateTimeOffset]::UtcNow.ToString('o')
-        BackupRoot=$record.BackupRoot; WaitedForActiveWork=$false }
+        BackupRoot=$record.BackupRoot; WaitedForActiveWork=$false
+        ArtifactHash=$record.ArtifactHash; BuildInfo=$record.BuildInfo; RequireStartupRecord=$record.RequireStartupRecord }
     Write-AtomicRestartMarker -Path (Join-Path $RepoRoot '.codex_discord_rust.force.completed') `
         -Text ($receipt | ConvertTo-Json -Compress)
     [IO.File]::Delete($journalPath)
     Write-RustWatchdogLog "force_restart_completed old=$($record.TargetIdentity) replacement=$($record.ChildIdentity)"
     Write-Output "force_restart_completed identity=$($record.ChildIdentity) active_work_wait=false"
+    } finally { $artifactPin.Dispose() }
 }

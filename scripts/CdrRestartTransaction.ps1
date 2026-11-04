@@ -15,11 +15,17 @@ function Assert-CdrRestartTransactionMarkers {
 function Invoke-CdrRestartTransaction {
     param($Fence)
     $journalPath = Join-Path $RepoRoot '.codex_discord_rust.restart.launch'
-    $record = New-CdrLaunchJournal $journalPath ('restart:' + $Fence.Nonce) $Fence
+    $record = Read-CdrLaunchJournal $journalPath
+    if ($null -eq $record) {
+        $artifact=Get-CdrRuntimeArtifact $BinaryPath $ExpectedBinaryHash $ExpectedSourceCommit
+        $record=New-CdrLaunchJournal $journalPath ('restart:' + $Fence.Nonce) $Fence $artifact.ArtifactHash -Artifact $artifact
+    } elseif ($record.Operation -cne ('restart:'+$Fence.Nonce) -or -not (Test-RestartDrainFenceMatch $record.Fence $Fence)) { throw 'Foreign restart journal preserved.' }
+    if ($record.Phase -eq 'preparing') { throw 'Restart preparation is incomplete; no launch authorized.' }
+    if ($ExpectedBinaryHash -and $record.ArtifactHash -cne $ExpectedBinaryHash.ToUpperInvariant()) { throw 'Restart artifact changed across handoff.' }
     Assert-CdrRestartTransactionMarkers $record
     $child = Get-CdrRecordedChild $record
     if ($null -ne $child) {
-        Wait-CdrReplacementReady -ExpectedIdentity $record.ChildIdentity
+        Wait-CdrReplacementReady -ExpectedIdentity $record.ChildIdentity -Artifact $record
     } else {
         if ($null -ne (Get-VerifiedRuntimeProcess)) {
             throw 'Unrecorded live runtime preserved; restart transaction paused'
@@ -47,10 +53,10 @@ function Invoke-CdrRestartTransaction {
         $record = Read-CdrLaunchJournal $journalPath
         $child = Get-CdrRecordedChild $record
         if ($null -eq $child) { throw 'Recorded replacement did not survive startup' }
-        Wait-CdrReplacementReady -ExpectedIdentity $record.ChildIdentity
+        Wait-CdrReplacementReady -ExpectedIdentity $record.ChildIdentity -Artifact $record
     }
     Assert-CdrRestartTransactionMarkers $record
-    Write-CdrRestartCompletion -Fence $Fence -ExpectedChildIdentity $record.ChildIdentity
+    Write-CdrRestartCompletion -Fence $Fence -ExpectedChildIdentity $record.ChildIdentity -Artifact $record
     foreach ($path in @($RestartPath, $DrainPreparePath, $DrainAckPath, $record.ClaimPath)) {
         if ($path -and [IO.File]::Exists($path)) { [IO.File]::Delete($path) }
     }

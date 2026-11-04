@@ -91,12 +91,9 @@ if (-not $SkipBuild) {
         if ([IO.File]::Exists($canonical)) {
             throw 'An installed runtime exists at the build destination; build externally and use verified deployment.'
         }
-        $cargo = Get-Command cargo -ErrorAction Stop
-        Push-Location $ScriptDir
-        try {
-            & $cargo.Source build --release --locked -p cdr-runtime
-            if ($LASTEXITCODE -ne 0) { throw "cargo build failed with exit code $LASTEXITCODE" }
-        } finally { Pop-Location }
+        Import-Module (Join-Path $ScriptDir 'scripts/CdrBuildProvenance.psm1') -Force
+        $null = Invoke-CdrRuntimeBuild -Root $ScriptDir -BinaryPath $buildOutput `
+            -CargoArguments @('build','--release','--locked','-p','cdr-runtime','--bin','cdr-runtime','--target-dir',$target)
     }
 }
 if (-not $DryRun -and -not (Test-Path -LiteralPath $BinaryPath -PathType Leaf)) {

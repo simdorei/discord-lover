@@ -89,15 +89,18 @@ function Write-AtomicRestartMarker {
 }
 
 function Enter-RestartDrain {
-    param($Process, [string]$ExpectedProcessIdentity, [int]$TimeoutSeconds)
+    param($Process, [string]$ExpectedProcessIdentity, [int]$TimeoutSeconds, $PreparedFence=$null)
     $identity = Get-RuntimeDrainIdentity -Process $Process `
         -ExpectedProcessIdentity $ExpectedProcessIdentity
     $fence = Get-RestartDrainFence -Path $DrainPreparePath
     if ($null -eq $fence) {
-        $fence = [pscustomobject]@{
+        $fence = if ($null -ne $PreparedFence) { $PreparedFence } else { [pscustomobject]@{
             RuntimeId = $identity.RuntimeId
             ProcessIdentity = $ExpectedProcessIdentity
             Nonce = [guid]::NewGuid().ToString('N')
+        } }
+        if ($fence.RuntimeId -cne $identity.RuntimeId -or $fence.ProcessIdentity -cne $ExpectedProcessIdentity) {
+            throw 'Prepared restart journal differs from the running instance.'
         }
         Write-AtomicRestartMarker -Path $DrainPreparePath -Text (
             "version=1`nruntime_id=$($fence.RuntimeId)`n" +
@@ -106,6 +109,9 @@ function Enter-RestartDrain {
     } elseif ($fence.RuntimeId -cne $identity.RuntimeId -or
         $fence.ProcessIdentity -cne $ExpectedProcessIdentity) {
         throw 'Existing restart drain targets a different runtime identity.'
+    }
+    if ($null -ne $PreparedFence -and -not (Test-RestartDrainFenceMatch $fence $PreparedFence)) {
+        throw 'Drain prepare differs from the pinned restart journal.'
     }
 
     $deadline = (Get-Date).AddSeconds($TimeoutSeconds)

@@ -20,6 +20,11 @@ fn publish(path: &str, text: String) {
 
 fn main() -> ExitCode {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
+    // This fixture models a legacy installed runtime without startup provenance.
+    if args.first().is_some_and(|v| v == "--build-info") {
+        eprintln!("ERROR: unknown argument: --build-info");
+        return ExitCode::from(2);
+    }
     if args.first().is_some_and(|v| v == "--admin") {
         return ExitCode::from(
             Command::new(std::env::var_os("CDR_UPGRADE_REAL_RUNTIME").unwrap())

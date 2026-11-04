@@ -80,6 +80,7 @@ impl<B: TurnBackend> QueueCoordinator<B> {
         if !pending_job_is_due(&pending, unix_now()?)
             || !self.unavailable_retry_due(target, Instant::now())?
         {
+            self.schedule_writer_retry(&pending)?;
             return Ok(());
         }
         if let Err(error) = self.backend.resume_thread(target).await {
@@ -148,8 +149,11 @@ impl<B: TurnBackend> QueueCoordinator<B> {
         job: &StoredQueueJob,
         error: &str,
     ) -> Result<(), QueueRunnerError> {
-        let _ =
-            record_preflight_failure(&self.db_path, &job.job_id, job.app_server_generation, error)?;
+        if let Some(recorded) =
+            record_preflight_failure(&self.db_path, &job.job_id, job.app_server_generation, error)?
+        {
+            self.schedule_writer_retry(&recorded)?;
+        }
         Ok(())
     }
 }
